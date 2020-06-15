@@ -199,6 +199,20 @@ public:
 	int iCwCheatRefreshRate;
 	float fCwCheatScrollPosition;
 	int iBloomHack; //0 = off, 1 = safe, 2 = balanced, 3 = aggressive
+	float fFovHack;
+	float fCamXHack;
+	float fCamYHack;
+	float fCamZHack;
+	float fCamRotHack;
+	float fFarCullHack;
+	float fTextureBorderHack;
+	float fRoundWorldHack;
+	float fToonHack;
+	bool bVertexColorHack;
+	bool bNormalHack;
+	bool bHideHudHack;
+	bool bLimboHack;
+	bool bNoFogHack;
 	bool bBlockTransferGPU;
 	bool bDisableSlowFramebufEffects;
 	bool bFragmentTestCache;

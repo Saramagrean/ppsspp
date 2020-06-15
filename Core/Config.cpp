@@ -768,7 +768,21 @@ static ConfigSetting graphicsSettings[] = {
 	ReportedConfigSetting("TexHardwareScaling", &g_Config.bTexHardwareScaling, false, true, true),
 	ConfigSetting("VSyncInterval", &g_Config.bVSync, false, true, true),
 	ReportedConfigSetting("BloomHack", &g_Config.iBloomHack, 0, true, true),
-
+	ConfigSetting("FovHack", &g_Config.fFovHack, 1.0f, true, true),
+	ConfigSetting("CamXHack", &g_Config.fCamXHack, 0.0f, true, true),
+	ConfigSetting("CamYHack", &g_Config.fCamYHack, 0.0f, true, true),
+	ConfigSetting("CamZHack", &g_Config.fCamZHack, 0.0f, true, true),
+	ConfigSetting("CamRotHack", &g_Config.fCamRotHack, 0.0f, true, true),
+	ConfigSetting("ToonHack", &g_Config.fToonHack, 0.0f, true, true),
+	ConfigSetting("WorldHack", &g_Config.fRoundWorldHack, 0.0f, true, true),
+	ConfigSetting("FarCullHack", &g_Config.fFarCullHack, 1.0f, true, true),
+	ConfigSetting("TextureBorderHack", &g_Config.fTextureBorderHack, 0.0f, true, true),
+	ConfigSetting("DisableFogHack", &g_Config.bNoFogHack, false, true, true),
+	ConfigSetting("VertexColorHack", &g_Config.bVertexColorHack, false, true, true),
+	ConfigSetting("NormalHack", &g_Config.bNormalHack, false, true, true),
+	ConfigSetting("HideHudHack", &g_Config.bHideHudHack, false, true, true),
+	ConfigSetting("LimboHack", &g_Config.bLimboHack, false, true, true),
+	
 	// Not really a graphics setting...
 	ReportedConfigSetting("SplineBezierQuality", &g_Config.iSplineBezierQuality, 2, true, true),
 	ReportedConfigSetting("HardwareTessellation", &g_Config.bHardwareTessellation, false, true, true),

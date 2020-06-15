@@ -364,6 +364,16 @@ void GenerateVertexShader(const VShaderID &id, char *buffer, uint32_t *attrMask,
 		}
 	}
 
+	// Round World far hack
+	if (g_Config.fFarCullHack != 1.0f || g_Config.bHideHudHack) {
+		WRITE(p, "%s float h_depth;\n",  varying);
+	}
+
+	// Normal hack
+	if (g_Config.bNormalHack) {
+		WRITE(p, "%s vec3 h_normal;\n",  varying);
+	}
+
 	// See comment above this function (GenerateVertexShader).
 	if (!isModeThrough && gstate_c.Supports(GPU_ROUND_DEPTH_TO_16BIT)) {
 		// Apply the projection and viewport to get the Z buffer value, floor to integer, undo the viewport and projection.
@@ -597,6 +607,26 @@ void GenerateVertexShader(const VShaderID &id, char *buffer, uint32_t *attrMask,
 		}
 
 		WRITE(p, "  vec4 viewPos = u_view * vec4(worldpos, 1.0);\n");
+
+		// Round World hack
+		if (g_Config.fRoundWorldHack != 0.0f) {
+			WRITE(p, "  float rotAngle1 = length(viewPos)*%f;\n", g_Config.fRoundWorldHack/100000.0f);
+			WRITE(p, "  viewPos.yz = vec2(viewPos.y*cos(rotAngle1)+viewPos.z*sin(rotAngle1), viewPos.z*cos(rotAngle1)-viewPos.y*sin(rotAngle1));\n");
+		}
+
+		// Camera hacks
+		if (g_Config.fCamXHack != 0.0f || g_Config.fCamYHack != 0.0f || g_Config.fCamZHack != 0.0f) {
+			WRITE(p, "  viewPos.xyz += vec3(%f, %f, %f)*viewPos.w;\n", g_Config.fCamXHack, g_Config.fCamYHack, g_Config.fCamZHack);
+		}
+
+		if (g_Config.fCamRotHack != 0.0f) {
+			WRITE(p, "  float rotAngle = %f;\n", 3.14159265358979323846*g_Config.fCamRotHack/180.0f);
+			WRITE(p, "  viewPos.yz = vec2(viewPos.y*cos(rotAngle)+viewPos.z*sin(rotAngle), viewPos.z*cos(rotAngle)-viewPos.y*sin(rotAngle));\n");
+		}
+
+		if (g_Config.fFovHack != 1.0f) {
+			WRITE(p, "  viewPos.xy *= %f;\n", 1.0/g_Config.fFovHack);
+		}
 
 		// Final view and projection transforms.
 		if (gstate_c.Supports(GPU_ROUND_DEPTH_TO_16BIT)) {
@@ -835,6 +865,11 @@ void GenerateVertexShader(const VShaderID &id, char *buffer, uint32_t *attrMask,
 			WRITE(p, "  v_fogdepth = (viewPos.z + u_fogcoef.x) * u_fogcoef.y;\n");
 	}
 
+	// Limbo Hack
+	if (g_Config.bLimboHack) {
+		 WRITE(p, "v_color0.rgb = vec3(0.0);\n");
+	}
+
 	if (!isModeThrough && gstate_c.Supports(GPU_SUPPORTS_VS_RANGE_CULLING)) {
 		WRITE(p, "  vec3 projPos = outPos.xyz / outPos.w;\n");
 		// Vertex range culling doesn't happen when depth is clamped, so only do this if in range.
@@ -847,6 +882,19 @@ void GenerateVertexShader(const VShaderID &id, char *buffer, uint32_t *attrMask,
 		WRITE(p, "  }\n");
 	}
 	WRITE(p, "  gl_Position = outPos;\n");
+
+	// Round World far hack
+	if (g_Config.fFarCullHack != 1.0f || g_Config.bHideHudHack) {
+		WRITE(p, "  h_depth = outPos.z/outPos.w;\n");
+	}
+
+	// Normal hack
+	if (g_Config.bNormalHack) {
+		if (hasNormal)
+			WRITE(p, "  h_normal = worldnormal*0.5+0.5;\n");
+		else
+			WRITE(p, "  h_normal = vec3(-1.0);\n");
+	}
 
 	WRITE(p, "}\n");
 }
