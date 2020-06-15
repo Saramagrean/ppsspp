@@ -493,6 +493,10 @@ void GameSettingsScreen::CreateViews() {
 		return !g_Config.bSoftwareRendering && g_Config.iInternalResolution != 1;
 	});
 
+	// Horrible hacks
+	if (GetGPUBackend() == GPUBackend::OPENGL)
+		graphicsSettings->Add(new Choice(sy->T("Horrible hacks")))->OnClick.Handle(this, &GameSettingsScreen::OnHackScreen);
+	
 	graphicsSettings->Add(new ItemHeader(gr->T("Overlay Information")));
 	static const char *fpsChoices[] = { "None", "Speed", "FPS", "Both" };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gr->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gr->GetName(), screenManager()));
@@ -1133,6 +1137,13 @@ UI::EventReturn GameSettingsScreen::OnDumpNextFrameToLog(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GameSettingsScreen::ClearShaderCache(UI::EventParams &e) {
+	if (gpu) {
+		gpu->ClearShaderCache();
+	}
+	return UI::EVENT_DONE;
+}
+
 void GameSettingsScreen::update() {
 	UIScreen::update();
 
@@ -1429,6 +1440,11 @@ UI::EventReturn GameSettingsScreen::OnDeveloperTools(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GameSettingsScreen::OnHackScreen(UI::EventParams &e) {
+	screenManager()->push(new HackScreen());
+	return UI::EVENT_DONE;
+}
+
 UI::EventReturn GameSettingsScreen::OnRemoteISO(UI::EventParams &e) {
 	screenManager()->push(new RemoteISOScreen());
 	return UI::EVENT_DONE;
@@ -1543,10 +1559,52 @@ void DeveloperToolsScreen::onFinish(DialogResult result) {
 	g_Config.Save("DeveloperToolsScreen::onFinish");
 }
 
+
+void HackScreen::CreateViews() {
+	using namespace UI;
+
+	auto gr = GetI18NCategory("Graphics");
+	auto di = GetI18NCategory("Dialog");
+
+	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
+	Choice *back = new Choice(di->T("Back"), "", false, new AnchorLayoutParams(130, WRAP_CONTENT, 10, NONE, NONE, 10));
+	root_->Add(back)->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 140, new AnchorLayoutParams(10, 0, 10, 0, false));
+	tabHolder->SetTag("Graphic Hack");
+	root_->Add(tabHolder);
+	ScrollView *rightPanel = new ScrollView(ORIENT_VERTICAL);
+	tabHolder->AddTab(gr->T("Hacks"), rightPanel);
+	LinearLayout *list = rightPanel->Add(new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, FILL_PARENT)));
+	list->SetSpacing(0);
+
+	list->Add(new ItemHeader(gr->T("Graphic Hack", "Graphic Hack Settings (these WILL cause glitches and WILL NOT work with many games)")));
+
+	PopupSliderChoiceFloat *fovHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fFovHack, 0.01f, 3.0f, gr->T("Fov override"), 1.0f, screenManager()));
+	PopupSliderChoiceFloat *camXHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fCamXHack, -10000.0f, 10000.0f, gr->T("Camera offset X"), 10.0f, screenManager()));
+	PopupSliderChoiceFloat *camYHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fCamYHack, -10000.0f, 10000.0f, gr->T("Camera offset Y"), 10.0f, screenManager()));
+	PopupSliderChoiceFloat *camZHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fCamZHack, -10000.0f, 10000.0f, gr->T("Camera offset Z"), 10.0f, screenManager()));
+	PopupSliderChoiceFloat *camRotHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fCamRotHack, -180.0f, 180.0f, gr->T("Camera rotation"), 1.0f, screenManager()));
+	PopupSliderChoiceFloat *roundWorldHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fRoundWorldHack, -50.0f, 50.0f, gr->T("Round world"), 1.0f, screenManager()));
+	PopupSliderChoiceFloat *farCullHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fFarCullHack, 0.0f, 1.0f, gr->T("Round world far cull"), 0.001f, screenManager()));
+	PopupSliderChoiceFloat *toonHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fToonHack, 0.0f, 1.0f, gr->T("Toon threshold (0: disabled)"), 0.01f, screenManager()));
+	PopupSliderChoiceFloat *textureBorderHack = list->Add(new PopupSliderChoiceFloat(&g_Config.fTextureBorderHack, 0.0f, 1.0f, gr->T("Texture border (0: disabled)"), 0.01f, screenManager()));
+	CheckBox *hideHudHack = list->Add(new CheckBox(&g_Config.bHideHudHack, gr->T("Hide game HUD")));
+	CheckBox *noFogHack = list->Add(new CheckBox(&g_Config.bNoFogHack, gr->T("Disable fog")));
+	CheckBox *limboHack = list->Add(new CheckBox(&g_Config.bLimboHack, gr->T("Limbo hack")));
+	CheckBox *vertexColorHack = list->Add(new CheckBox(&g_Config.bVertexColorHack, gr->T("Show only vertex color")));
+	CheckBox *normalHack = list->Add(new CheckBox(&g_Config.bNormalHack, gr->T("Show normal")));
+}
+
 void GameSettingsScreen::CallbackRestoreDefaults(bool yes) {
 	if (yes)
 		g_Config.RestoreDefaults();
 	host->UpdateUI();
+}
+
+void HackScreen::onFinish(DialogResult result) {
+	if (gpu) {
+		gpu->ClearShaderCache();
+	}
 }
 
 UI::EventReturn GameSettingsScreen::OnRestoreDefaultSettings(UI::EventParams &e) {
