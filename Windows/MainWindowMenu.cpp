@@ -44,6 +44,7 @@
 #include "Core/Core.h"
 
 extern bool g_TakeScreenshot;
+extern bool g_ShaderNameListChanged;
 
 namespace MainWindow {
 	extern HINSTANCE hInst;
@@ -151,7 +152,7 @@ namespace MainWindow {
 		int item = ID_SHADERS_BASE + 1;
 
 		for (size_t i = 0; i < availableShaders.size(); i++)
-			CheckMenuItem(menu, item++, ((g_Config.sPostShaderName == availableShaders[i]) ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, item++, ((g_Config.vPostShaderNames[0] == availableShaders[i] && (g_Config.vPostShaderNames[0] == "Off" || g_Config.vPostShaderNames[1] == "Off")) ? MF_CHECKED : MF_UNCHECKED));
 	}
 
 	bool CreateShadersSubmenu(HMENU menu) {
@@ -185,7 +186,7 @@ namespace MainWindow {
 				continue;
 			int checkedStatus = MF_UNCHECKED;
 			availableShaders.push_back(i->section);
-			if (g_Config.sPostShaderName == i->section) {
+			if (g_Config.vPostShaderNames[0] == i->section && (g_Config.vPostShaderNames[0] == "Off" || g_Config.vPostShaderNames[1] == "Off")) {
 				checkedStatus = MF_CHECKED;
 			}
 
@@ -1056,8 +1057,11 @@ namespace MainWindow {
 			// ID_SHADERS_BASE and an additional 1 off it.
 			u32 index = (wParam - ID_SHADERS_BASE - 1);
 			if (index < availableShaders.size()) {
-				g_Config.sPostShaderName = availableShaders[index];
-
+				g_Config.vPostShaderNames.clear();
+				if (availableShaders[index] != "Off")
+					g_Config.vPostShaderNames.push_back(availableShaders[index]);
+				g_Config.vPostShaderNames.push_back("Off");
+				g_ShaderNameListChanged = true;
 				NativeMessageReceived("gpu_resized", "");
 				break;
 			}

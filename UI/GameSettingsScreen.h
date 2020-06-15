@@ -81,7 +81,6 @@ private:
 	UI::EventReturn OnLanguage(UI::EventParams &e);
 	UI::EventReturn OnLanguageChange(UI::EventParams &e);
 	UI::EventReturn OnAutoFrameskip(UI::EventParams &e);
-	UI::EventReturn OnPostProcShader(UI::EventParams &e);
 	UI::EventReturn OnPostProcShaderChange(UI::EventParams &e);
 	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
 	UI::EventReturn OnHackScreen(UI::EventParams &e);
@@ -131,6 +130,7 @@ private:
 	int prevInflightFrames_;
 	bool enableReports_;
 	bool tessHWEnable_;
+	std::string shaderNames_[256];
 
 	//edit the game-specific settings and restore the global settings after exiting
 	bool editThenRestore_;

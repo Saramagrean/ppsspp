@@ -68,4 +68,6 @@ void ReloadAllPostShaderInfo();
 
 const ShaderInfo *GetPostShaderInfo(const std::string &name);
 std::vector<const ShaderInfo *> GetPostShaderChain(const std::string &name);
+std::vector<const ShaderInfo *> GetFullPostShadersChain(const std::vector<std::string> &names);
+bool PostShaderChainRequires60FPS(const std::vector<const ShaderInfo *> &chain);
 const std::vector<ShaderInfo> &GetAllPostShaderInfo();

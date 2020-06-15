@@ -218,7 +218,7 @@ public:
 	bool bFragmentTestCache;
 	int iSplineBezierQuality; // 0 = low , 1 = Intermediate , 2 = High
 	bool bHardwareTessellation;
-	std::string sPostShaderName;  // Off for off.
+	std::vector<std::string> vPostShaderNames; // Off for chain end (only Off for no shader)
 	std::map<std::string, float> mPostShaderSetting;
 	bool bGfxDebugOutput;
 	bool bGfxDebugSplitSubmit;
@@ -280,6 +280,7 @@ public:
 	//the base x and y tilt. this inclination is treated as (0,0) and the tilt input
 	//considers this orientation to be equal to no movement of the analog stick.
 	float fTiltBaseX, fTiltBaseY;
+	int iTiltOrientation;
 	//whether the x axes and y axes should invert directions (left becomes right, top becomes bottom.)
 	bool bInvertTiltX, bInvertTiltY;
 	//the sensitivity of the tilt in the x direction
@@ -325,6 +326,7 @@ public:
 
 	// Floating analog stick (recenters on thumb on press).
 	bool bAutoCenterTouchAnalog;
+	bool bStickyTouchAnalog;
 
 	//space between PSP buttons
 	//the PSP button's center (triangle, circle, square, cross)

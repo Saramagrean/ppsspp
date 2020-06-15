@@ -148,6 +148,7 @@ std::string config_filename;
 
 // Really need to clean this mess of globals up... but instead I add more :P
 bool g_TakeScreenshot;
+bool g_ShaderNameListChanged = false;
 static bool isOuya;
 static bool resized = false;
 static bool restarting = false;
@@ -1260,13 +1261,27 @@ bool NativeAxis(const AxisInput &axis) {
 	// This is static, since we need to remember where we last were (in terms of orientation)
 	static Tilt currentTilt;
 
+	// tilt on x or y?
+	static bool verticalTilt;
+	if (g_Config.iTiltOrientation == 0)
+		verticalTilt = false;
+	else if (g_Config.iTiltOrientation == 1)
+		verticalTilt = true;
+
 	// x and y are flipped if we are in landscape orientation. The events are
 	// sent with respect to the portrait coordinate system, while we
 	// take all events in landscape.
 	// see [http://developer.android.com/guide/topics/sensors/sensors_overview.html] for details
 	bool portrait = dp_yres > dp_xres;
 	switch (axis.axisId) {
+		//TODO: make this generic.
 		case JOYSTICK_AXIS_ACCELEROMETER_X:
+			if (verticalTilt) {
+				if (fabs(axis.value) < 0.8f && g_Config.iTiltOrientation == 2) // Auto tilt switch
+					verticalTilt = false;
+				else
+					return false; // Tilt on Z instead
+			}
 			if (portrait) {
 				currentTilt.x_ = axis.value;
 			} else {
@@ -1283,9 +1298,18 @@ bool NativeAxis(const AxisInput &axis) {
 			break;
 
 		case JOYSTICK_AXIS_ACCELEROMETER_Z:
-			//don't handle this now as only landscape is enabled.
-			//TODO: make this generic.
-			return false;
+			if (!verticalTilt) {
+				if (fabs(axis.value) < 0.8f && g_Config.iTiltOrientation == 2) // Auto tilt switch
+					verticalTilt = true;
+				else
+					return false; // Tilt on X instead
+			}
+			if (portrait) {
+				currentTilt.x_ = -axis.value;
+			} else {
+				currentTilt.y_ = -axis.value;
+			}
+			break;
 			
 		case JOYSTICK_AXIS_OUYA_UNKNOWN1:
 		case JOYSTICK_AXIS_OUYA_UNKNOWN2:

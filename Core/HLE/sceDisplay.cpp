@@ -752,15 +752,10 @@ void __DisplayFlip(int cyclesLate) {
 	// But, let's flip at least once every 10 vblanks, to update fps, etc.
 	const bool noRecentFlip = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && numVBlanksSinceFlip >= 10;
 	// Also let's always flip for animated shaders.
-	const ShaderInfo *shaderInfo = g_Config.sPostShaderName == "Off" ? nullptr : GetPostShaderInfo(g_Config.sPostShaderName);
 	bool postEffectRequiresFlip = false;
 	// postEffectRequiresFlip is not compatible with frameskip unthrottling, see #12325.
 	if (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && !(g_Config.bFrameSkipUnthrottle && !FrameTimingThrottled())) {
-		if (shaderInfo) {
-			postEffectRequiresFlip = (shaderInfo->requires60fps || g_Config.bRenderDuplicateFrames);
-		} else {
-			postEffectRequiresFlip = g_Config.bRenderDuplicateFrames;
-		}
+		postEffectRequiresFlip = g_Config.bRenderDuplicateFrames || PostShaderChainRequires60FPS(GetFullPostShadersChain(g_Config.vPostShaderNames));
 	}
 
 	const bool fbDirty = gpu->FramebufferDirty();
