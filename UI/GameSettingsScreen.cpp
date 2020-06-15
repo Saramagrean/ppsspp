@@ -529,6 +529,7 @@ void GameSettingsScreen::CreateViews() {
 	graphicsSettings->Add(new ItemHeader(gr->T("Overlay Information")));
 	static const char *fpsChoices[] = { "None", "Speed", "FPS", "Both" };
 	graphicsSettings->Add(new PopupMultiChoice(&g_Config.iShowFPSCounter, gr->T("Show FPS Counter"), fpsChoices, 0, ARRAY_SIZE(fpsChoices), gr->GetName(), screenManager()));
+	graphicsSettings->Add(new Choice(gr->T("FPS Counter Layout")))->OnClick.Handle(this, &GameSettingsScreen::OnCustomizeFPSCounterClick);
 	graphicsSettings->Add(new CheckBox(&g_Config.bShowDebugStats, gr->T("Show Debug Statistics")))->OnClick.Handle(this, &GameSettingsScreen::OnJitAffectingSetting);
 
 	// Developer tools are not accessible ingame, so it goes here.
@@ -1928,4 +1929,155 @@ void SettingInfoMessage::Draw(UIContext &dc) {
 
 	text_->SetTextColor(whiteAlpha(alpha));
 	ViewGroup::Draw(dc);
+}
+
+UI::EventReturn CustomizeFPSCounterScreen::OnFPSCounterColorClick(UI::EventParams &e) {
+	auto sy = GetI18NCategory("System");
+	auto colorSettings = new ColorPickerScreen(sy->T("FPS Counter Color"), &g_Config.uFPSCounterColor);
+	if (e.v)
+		colorSettings->SetPopupOrigin(e.v);
+
+	screenManager()->push(colorSettings);
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn CustomizeFPSCounterScreen::OnFPSBackGroundColorClick(UI::EventParams &e) {
+	auto sy = GetI18NCategory("System");
+	auto colorSettings = new ColorPickerScreen(sy->T("FPS Background Color"), &g_Config.uFPSCounterBackground);
+	if (e.v)
+		colorSettings->SetPopupOrigin(e.v);
+
+	screenManager()->push(colorSettings);
+	return UI::EVENT_DONE;
+}
+
+void ColorPickerScreen::CreatePopupContents(UI::ViewGroup *parent) {
+	using namespace UI;
+
+	auto di = GetI18NCategory("Dialog");
+
+	red_ = *color_ & 0x000000ff;
+	green_ = (*color_ & 0x0000ff00) >> 8;
+	blue_ = (*color_ & 0x00ff0000) >> 16;
+	alpha_ = (*color_ & 0xff000000) >> 24;
+
+	ScrollView *scroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, 50, 1.0f));
+	LinearLayout *items = new LinearLayout(ORIENT_VERTICAL);
+
+	items->Add(new ItemHeader(di->T("Red")));
+	items->Add(new Slider(&red_, 0, 255, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, Margins(15, 10))));
+	items->Add(new ItemHeader(di->T("Green")));
+	items->Add(new Slider(&green_, 0, 255, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, Margins(15, 10))));
+	items->Add(new ItemHeader(di->T("Blue")));
+	items->Add(new Slider(&blue_, 0, 255, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, Margins(15, 10))));
+	items->Add(new ItemHeader(di->T("Opacity")));
+	items->Add(new Slider(&alpha_, 0, 255, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, Margins(15, 10))));
+
+	items->Add(new ItemHeader(di->T("Presets")));
+	UI::GridLayoutSettings gridsettings(128, 64, 5);
+	gridsettings.fillCells = true;
+	GridLayout *grid = items->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
+
+	Choice *white = new Choice(di->T("White"));
+	white->SetCentered(true);
+	grid->Add(white)->OnClick.Add([=](EventParams &e) {
+		red_ = 255;
+		green_ = 255;
+		blue_ = 255;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *black = new Choice(di->T("Black"));
+	black->SetCentered(true);
+	grid->Add(black)->OnClick.Add([=](EventParams &e) {
+		red_ = 0;
+		green_ = 0;
+		blue_ = 0;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *red = new Choice(di->T("Red"));
+	red->SetCentered(true);
+	grid->Add(red)->OnClick.Add([=](EventParams &e) {
+		red_ = 255;
+		green_ = 63;
+		blue_ = 63;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *green = new Choice(di->T("Green"));
+	green->SetCentered(true);
+	grid->Add(green)->OnClick.Add([=](EventParams &e) {
+		red_ = 63;
+		green_ = 255;
+		blue_ = 63;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *blue = new Choice(di->T("Blue"));
+	blue->SetCentered(true);
+	grid->Add(blue)->OnClick.Add([=](EventParams &e) {
+		red_ = 63;
+		green_ = 63;
+		blue_ = 255;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *magenta = new Choice(di->T("Magenta"));
+	magenta->SetCentered(true);
+	grid->Add(magenta)->OnClick.Add([=](EventParams &e) {
+		red_ = 255;
+		green_ = 63;
+		blue_ = 255;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *yellow = new Choice(di->T("Yellow"));
+	yellow->SetCentered(true);
+	grid->Add(yellow)->OnClick.Add([=](EventParams &e) {
+		red_ = 255;
+		green_ = 255;
+		blue_ = 63;
+		return UI::EVENT_CONTINUE;
+	});
+	Choice *cyan = new Choice(di->T("Cyan"));
+	cyan->SetCentered(true);
+	grid->Add(cyan)->OnClick.Add([=](EventParams &e) {
+		red_ = 63;
+		green_ = 255;
+		blue_ = 255;
+		return UI::EVENT_CONTINUE;
+	});
+
+	items->Add(new Button(di->T("OK"), new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)))->OnClick.Handle<UIScreen>(this, &UIScreen::OnOK);
+	scroll->Add(items);
+	parent->Add(scroll);
+}
+
+void ColorPickerScreen::onFinish(DialogResult result) {
+	*color_ = (alpha_ << 24)|(blue_ << 16)|(green_ << 8)|red_;
+}
+
+void CustomizeFPSCounterScreen::CreateViews() {
+	using namespace UI;
+
+	auto di = GetI18NCategory("Dialog");
+	auto gr = GetI18NCategory("Graphics");
+
+	root_ = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
+	Choice *back = new Choice(di->T("Back"), "", false, new AnchorLayoutParams(130, WRAP_CONTENT, 10, NONE, NONE, 10));
+	root_->Add(back)->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	TabHolder *tabHolder = new TabHolder(ORIENT_VERTICAL, 140, new AnchorLayoutParams(10, 0, 10, 0, false));
+	root_->Add(tabHolder);
+	ScrollView *rightPanel = new ScrollView(ORIENT_VERTICAL);
+	tabHolder->AddTab(gr->T("FPS"), rightPanel);
+	LinearLayout *vert = rightPanel->Add(new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, FILL_PARENT)));
+	vert->SetSpacing(0);
+
+	static const char *fpsPosition[] = { "Top Right", "Top Left", "Bottom Right", "Bottom Left" };
+	vert->Add(new PopupMultiChoice(&g_Config.iFPSCounterPosition, gr->T("FPS Counter Position"), fpsPosition, 0, ARRAY_SIZE(fpsPosition), gr->GetName(), screenManager()));
+	vert->Add(new PopupSliderChoiceFloat(&g_Config.fFPSCounterSize, 0.5f, 3.0f, gr->T("FPS Counter Size"), 0.01f, screenManager()));
+	vert->Add(new Choice(gr->T("FPS Counter Color")))->OnClick.Handle(this, &CustomizeFPSCounterScreen::OnFPSCounterColorClick);
+	vert->Add(new CheckBox(&g_Config.bFPSCounterShadow, gr->T("FPS Counter Shadow")));
+	vert->Add(new Choice(gr->T("FPS Background Color")))->OnClick.Handle(this, &CustomizeFPSCounterScreen::OnFPSBackGroundColorClick);
+}
+
+UI::EventReturn GameSettingsScreen::OnCustomizeFPSCounterClick(UI::EventParams &e) {
+	screenManager()->push(new CustomizeFPSCounterScreen());
+
+	return UI::EVENT_DONE;
 }
