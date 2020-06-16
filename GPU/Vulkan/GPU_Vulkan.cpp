@@ -166,6 +166,9 @@ void GPU_Vulkan::SaveCache(std::string filename) {
 }
 
 GPU_Vulkan::~GPU_Vulkan() {
+	VulkanRenderManager *rm = (VulkanRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
+	rm->DrainCompileQueue();
+
 	SaveCache(shaderCachePath_);
 	// Note: We save the cache in DeviceLost
 	DestroyDeviceObjects();
