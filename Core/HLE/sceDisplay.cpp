@@ -560,7 +560,7 @@ static void DoFrameTiming(bool &throttle, bool &skipFrame, float timestep) {
 	// we have nothing to do here.
 	bool doFrameSkip = g_Config.iFrameSkip != 0;
 
-	bool unthrottleNeedsSkip = g_Config.bFrameSkipUnthrottle;
+	bool unthrottleNeedsSkip = g_Config.iUnthrottleMode == (int)UnthrottleMode::SKIP_DRAW;
 	if (g_Config.bVSync && GetGPUBackend() == GPUBackend::VULKAN) {
 		// Vulkan doesn't support the interval setting, so we force frameskip.
 		unthrottleNeedsSkip = true;
@@ -754,7 +754,8 @@ void __DisplayFlip(int cyclesLate) {
 	// Also let's always flip for animated shaders.
 	bool postEffectRequiresFlip = false;
 	// postEffectRequiresFlip is not compatible with frameskip unthrottling, see #12325.
-	if (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && !(g_Config.bFrameSkipUnthrottle && !FrameTimingThrottled())) {
+	bool unthrottleSkips = g_Config.iUnthrottleMode != (int)UnthrottleMode::CONTINUOUS;
+	if (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && !(unthrottleSkips && !FrameTimingThrottled())) {
 		postEffectRequiresFlip = g_Config.bRenderDuplicateFrames || PostShaderChainRequires60FPS(GetFullPostShadersChain(g_Config.vPostShaderNames));
 	}
 
@@ -779,11 +780,24 @@ void __DisplayFlip(int cyclesLate) {
 			hasNotifiedSlow = true;
 		}
 
+		bool forceNoFlip = false;
+		// Alternative to frameskip unthrottle, where we draw everything.
+		// Useful if skipping a frame breaks graphics or for checking drawing speed.
+		if (g_Config.iUnthrottleMode == (int)UnthrottleMode::SKIP_FLIP && !FrameTimingThrottled()) {
+			static double lastFlip = 0;
+			double now = time_now_d();
+			if ((now - lastFlip) < 1.0f / System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE)) {
+				forceNoFlip = true;
+			} else {
+				lastFlip = now;
+			}
+		}
+
 		// Setting CORE_NEXTFRAME causes a swap.
 		const bool fbReallyDirty = gpu->FramebufferReallyDirty();
 		if (fbReallyDirty || noRecentFlip || postEffectRequiresFlip) {
 			// Check first though, might've just quit / been paused.
-			if (coreState == CORE_RUNNING) {
+			if (coreState == CORE_RUNNING && !forceNoFlip) {
 				coreState = CORE_NEXTFRAME;
 				gpu->CopyDisplayToOutput(fbReallyDirty);
 				if (fbReallyDirty) {
