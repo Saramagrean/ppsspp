@@ -189,7 +189,6 @@ private:
 
 	float posX_ = 0.0f;
 	float posY_ = 0.0f;
-	float lastTouchDownTime_;
 };
 
 //initializes the layout from Config. if a default layout does not exist,
