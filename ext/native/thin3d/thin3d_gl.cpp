@@ -3,7 +3,6 @@
 #include <string>
 #include <algorithm>
 #include <map>
-#include <cassert>
 
 #include "base/logging.h"
 #include "math/dataconv.h"
@@ -297,7 +296,6 @@ public:
 	OpenGLPipeline(GLRenderManager *render) : render_(render) {
 	}
 	~OpenGLPipeline() {
-		DLOG("OpenGLPipeline released");
 		for (auto &iter : shaders) {
 			iter->Release();
 		}
@@ -323,6 +321,8 @@ public:
 
 	// TODO: Optimize by getting the locations first and putting in a custom struct
 	UniformBufferDesc dynamicUniforms;
+	GLint samplerLocs_[8];
+	std::vector<GLint> dynamicUniformLocs_;
 	GLRProgram *program_ = nullptr;
 
 private:
@@ -382,12 +382,12 @@ public:
 	void GetFramebufferDimensions(Framebuffer *fbo, int *w, int *h) override;
 
 	void BindSamplerStates(int start, int count, SamplerState **states) override {
-		if (boundSamplers_.size() < (size_t)(start + count)) {
-			boundSamplers_.resize(start + count);
+		if (start + count >= MAX_TEXTURE_SLOTS) {
+			return;
 		}
 		for (int i = 0; i < count; i++) {
 			int index = i + start;
-			boundSamplers_[index] = static_cast<OpenGLSamplerState *>(states[index]);
+			boundSamplers_[index] = static_cast<OpenGLSamplerState *>(states[i]);
 		}
 	}
 
@@ -487,9 +487,8 @@ private:
 
 	GLRenderManager renderManager_;
 
-	std::vector<OpenGLSamplerState *> boundSamplers_;
-	OpenGLTexture *boundTextures_[8]{};
-	int maxTextures_ = 0;
+	OpenGLSamplerState *boundSamplers_[MAX_TEXTURE_SLOTS]{};
+	OpenGLTexture *boundTextures_[MAX_TEXTURE_SLOTS]{};
 	DeviceCaps caps_{};
 
 	// Bound state
@@ -603,7 +602,6 @@ OpenGLContext::~OpenGLContext() {
 	for (int i = 0; i < GLRenderManager::MAX_INFLIGHT_FRAMES; i++) {
 		renderManager_.DeletePushBuffer(frameData_[i].push);
 	}
-	boundSamplers_.clear();
 }
 
 void OpenGLContext::BeginFrame() {
@@ -616,6 +614,15 @@ void OpenGLContext::EndFrame() {
 	FrameData &frameData = frameData_[renderManager_.GetCurFrame()];
 	renderManager_.EndPushBuffer(frameData.push);  // upload the data!
 	renderManager_.Finish();
+
+	// Unbind stuff.
+	for (auto &texture : boundTextures_) {
+		texture = nullptr;
+	}
+	for (auto &sampler : boundSamplers_) {
+		sampler = nullptr;
+	}
+	curPipeline_ = nullptr;
 }
 
 InputLayout *OpenGLContext::CreateInputLayout(const InputLayoutDesc &desc) {
@@ -953,6 +960,15 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 		ELOG("Pipeline requires at least one shader");
 		return nullptr;
 	}
+	if ((int)desc.prim >= (int)Primitive::PRIMITIVE_TYPE_COUNT) {
+		ELOG("Invalid primitive type");
+		return nullptr;
+	}
+	if (!desc.depthStencil || !desc.blend || !desc.raster || !desc.inputLayout) {
+		ELOG("Incomplete prim desciption");
+		return nullptr;
+	}
+
 	OpenGLPipeline *pipeline = new OpenGLPipeline(&renderManager_);
 	for (auto iter : desc.shaders) {
 		if (iter) {
@@ -964,7 +980,10 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 			return nullptr;
 		}
 	}
-	ILOG("Linking shaders.");
+	if (desc.uniformDesc) {
+		pipeline->dynamicUniforms = *desc.uniformDesc;
+		pipeline->dynamicUniformLocs_.resize(desc.uniformDesc->uniforms.size());
+	}
 	if (pipeline->LinkShaders()) {
 		// Build the rest of the virtual pipeline object.
 		pipeline->prim = primToGL[(int)desc.prim];
@@ -976,8 +995,6 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 		pipeline->blend->AddRef();
 		pipeline->raster->AddRef();
 		pipeline->inputLayout->AddRef();
-		if (desc.uniformDesc)
-			pipeline->dynamicUniforms = *desc.uniformDesc;
 		return pipeline;
 	} else {
 		ELOG("Failed to create pipeline - shaders failed to link");
@@ -987,11 +1004,13 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 }
 
 void OpenGLContext::BindTextures(int start, int count, Texture **textures) {
-	maxTextures_ = std::max(maxTextures_, start + count);
+	if (start + count >= MAX_TEXTURE_SLOTS) {
+		return;
+	}
 	for (int i = start; i < start + count; i++) {
-		OpenGLTexture *glTex = static_cast<OpenGLTexture *>(textures[i]);
+		OpenGLTexture *glTex = static_cast<OpenGLTexture *>(textures[i - start]);
 		if (!glTex) {
-			boundTextures_[i] = 0;
+			boundTextures_[i] = nullptr;
 			renderManager_.BindTexture(i, nullptr);
 			continue;
 		}
@@ -1001,25 +1020,24 @@ void OpenGLContext::BindTextures(int start, int count, Texture **textures) {
 }
 
 void OpenGLContext::ApplySamplers() {
-	for (int i = 0; i < maxTextures_; i++) {
-		if ((int)boundSamplers_.size() > i && boundSamplers_[i]) {
-			const OpenGLSamplerState *samp = boundSamplers_[i];
-			const OpenGLTexture *tex = boundTextures_[i];
-			if (!tex)
-				continue;
-			GLenum wrapS;
-			GLenum wrapT;
-			if (tex->CanWrap()) {
-				wrapS = samp->wrapU;
-				wrapT = samp->wrapV;
-			} else {
-				wrapS = GL_CLAMP_TO_EDGE;
-				wrapT = GL_CLAMP_TO_EDGE;
-			}
-			GLenum magFilt = samp->magFilt;
-			GLenum minFilt = tex->HasMips() ? samp->mipMinFilt : samp->minFilt;
-			renderManager_.SetTextureSampler(i, wrapS, wrapT, magFilt, minFilt, 0.0f);
+	for (int i = 0; i < MAX_TEXTURE_SLOTS; i++) {
+		const OpenGLSamplerState *samp = boundSamplers_[i];
+		const OpenGLTexture *tex = boundTextures_[i];
+		if (!samp || !tex) {
+			continue;
 		}
+		GLenum wrapS;
+		GLenum wrapT;
+		if (tex->CanWrap()) {
+			wrapS = samp->wrapU;
+			wrapT = samp->wrapV;
+		} else {
+			wrapS = GL_CLAMP_TO_EDGE;
+			wrapT = GL_CLAMP_TO_EDGE;
+		}
+		GLenum magFilt = samp->magFilt;
+		GLenum minFilt = tex->HasMips() ? samp->mipMinFilt : samp->minFilt;
+		renderManager_.SetTextureSampler(i, wrapS, wrapT, magFilt, minFilt, 0.0f);
 	}
 }
 
@@ -1035,9 +1053,21 @@ ShaderModule *OpenGLContext::CreateShaderModule(ShaderStage stage, ShaderLanguag
 
 bool OpenGLPipeline::LinkShaders() {
 	std::vector<GLRShader *> linkShaders;
-	for (auto iter : shaders) {
-		linkShaders.push_back(iter->GetShader());
+	for (auto shaderModule : shaders) {
+		if (shaderModule) {
+			GLRShader *shader = shaderModule->GetShader();
+			if (shader) {
+				linkShaders.push_back(shader);
+			} else {
+				ELOG("LinkShaders: Bad shader module");
+				return false;
+			}
+		} else {
+			ELOG("LinkShaders: Bad shader in module");
+			return false;
+		}
 	}
+
 	std::vector<GLRProgram::Semantic> semantics;
 	// Bind all the common vertex data points. Mismatching ones will be ignored.
 	semantics.push_back({ SEM_POSITION, "Position" });
@@ -1050,7 +1080,14 @@ bool OpenGLPipeline::LinkShaders() {
 	semantics.push_back({ SEM_POSITION, "a_position" });
 	semantics.push_back({ SEM_TEXCOORD0, "a_texcoord0" });
 	std::vector<GLRProgram::UniformLocQuery> queries;
+	queries.push_back({ &samplerLocs_[0], "sampler0" });
+	queries.push_back({ &samplerLocs_[1], "sampler1" });
+	for (size_t i = 0; i < dynamicUniforms.uniforms.size(); ++i) {
+		queries.push_back({ &dynamicUniformLocs_[i], dynamicUniforms.uniforms[i].name });
+	}
 	std::vector<GLRProgram::Initializer> initialize;
+	initialize.push_back({ &samplerLocs_[0], 0, 0 });
+	initialize.push_back({ &samplerLocs_[1], 0, 1 });
 	program_ = render_->CreateProgram(linkShaders, semantics, queries, initialize, false);
 	return true;
 }
@@ -1070,32 +1107,34 @@ void OpenGLContext::UpdateDynamicUniformBuffer(const void *ub, size_t size) {
 		Crash();
 	}
 
-	for (auto &uniform : curPipeline_->dynamicUniforms.uniforms) {
+	for (size_t i = 0; i < curPipeline_->dynamicUniforms.uniforms.size(); ++i) {
+		const auto &uniform = curPipeline_->dynamicUniforms.uniforms[i];
+		const GLint &loc = curPipeline_->dynamicUniformLocs_[i];
 		const float *data = (const float *)((uint8_t *)ub + uniform.offset);
 		switch (uniform.type) {
 		case UniformType::FLOAT1:
 		case UniformType::FLOAT2:
 		case UniformType::FLOAT3:
 		case UniformType::FLOAT4:
-			renderManager_.SetUniformF(uniform.name, 1 + (int)uniform.type - (int)UniformType::FLOAT1, data);
+			renderManager_.SetUniformF(&loc, 1 + (int)uniform.type - (int)UniformType::FLOAT1, data);
 			break;
 		case UniformType::MATRIX4X4:
-			renderManager_.SetUniformM4x4(uniform.name, data);
+			renderManager_.SetUniformM4x4(&loc, data);
 			break;
 		}
 	}
 }
 
 void OpenGLContext::Draw(int vertexCount, int offset) {
-	_dbg_assert_msg_(G3D, curVBuffers_[0], "Can't call Draw without a vertex buffer");
+	_dbg_assert_msg_(curVBuffers_[0], "Can't call Draw without a vertex buffer");
 	ApplySamplers();
 	renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, curVBuffers_[0]->buffer_, curVBufferOffsets_[0]);
 	renderManager_.Draw(curPipeline_->prim, offset, vertexCount);
 }
 
 void OpenGLContext::DrawIndexed(int vertexCount, int offset) {
-	_dbg_assert_msg_(G3D, curVBuffers_[0], "Can't call DrawIndexed without a vertex buffer");
-	_dbg_assert_msg_(G3D, curIBuffer_, "Can't call DrawIndexed without an index buffer");
+	_dbg_assert_msg_(curVBuffers_[0], "Can't call DrawIndexed without a vertex buffer");
+	_dbg_assert_msg_(curIBuffer_, "Can't call DrawIndexed without an index buffer");
 	ApplySamplers();
 	renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, curVBuffers_[0]->buffer_, curVBufferOffsets_[0]);
 	renderManager_.BindIndexBuffer(curIBuffer_->buffer_);
@@ -1112,7 +1151,6 @@ void OpenGLContext::DrawUP(const void *vdata, int vertexCount) {
 	size_t offset = frameData.push->Push(vdata, dataSize, &buf);
 
 	ApplySamplers();
-
 	renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, buf, offset);
 	renderManager_.Draw(curPipeline_->prim, 0, vertexCount);
 }

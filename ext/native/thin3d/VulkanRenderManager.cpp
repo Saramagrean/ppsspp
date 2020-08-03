@@ -58,10 +58,10 @@ void CreateImage(VulkanContext *vulkan, VkCommandBuffer cmd, VKRImage &img, int 
 	vulkan->MemoryTypeFromProperties(memreq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &alloc.memoryTypeIndex);
 
 	VkResult res = vkAllocateMemory(vulkan->GetDevice(), &alloc, nullptr, &img.memory);
-	assert(res == VK_SUCCESS);
+	_dbg_assert_(res == VK_SUCCESS);
 
 	res = vkBindImageMemory(vulkan->GetDevice(), img.image, img.memory, 0);
-	assert(res == VK_SUCCESS);
+	_dbg_assert_(res == VK_SUCCESS);
 
 	VkImageAspectFlags aspects = color ? VK_IMAGE_ASPECT_COLOR_BIT : (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
@@ -133,7 +133,12 @@ VulkanRenderManager::VulkanRenderManager(VulkanContext *vulkan) : vulkan_(vulkan
 		cmd_alloc.commandPool = frameData_[i].cmdPoolMain;
 		res = vkAllocateCommandBuffers(vulkan_->GetDevice(), &cmd_alloc, &frameData_[i].mainCmd);
 		assert(res == VK_SUCCESS);
-		frameData_[i].fence = vulkan_->CreateFence(true);  // So it can be instantly waited on
+
+		// Creating the frame fence with true so they can be instantly waited on the first frame
+		frameData_[i].fence = vulkan_->CreateFence(true);
+
+		// This fence one is used for synchronizing readbacks. Does not need preinitialization.
+		frameData_[i].readbackFence = vulkan_->CreateFence(false);
 
 		VkQueryPoolCreateInfo query_ci{ VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
 		query_ci.queryCount = MAX_TIMESTAMP_QUERIES;
@@ -208,6 +213,8 @@ void VulkanRenderManager::CreateBackbuffers() {
 		vulkan_->UpdateInflightFrames(newInflightFrames_);
 		newInflightFrames_ = -1;
 	}
+
+	outOfDateFrames_ = 0;
 
 	// Start the thread.
 	if (useThread_ && HasBackbuffers()) {
@@ -305,6 +312,7 @@ VulkanRenderManager::~VulkanRenderManager() {
 		vkDestroyCommandPool(device, frameData_[i].cmdPoolInit, nullptr);
 		vkDestroyCommandPool(device, frameData_[i].cmdPoolMain, nullptr);
 		vkDestroyFence(device, frameData_[i].fence, nullptr);
+		vkDestroyFence(device, frameData_[i].readbackFence, nullptr);
 		vkDestroyQueryPool(device, frameData_[i].profile.queryPool, nullptr);
 	}
 	queueRunner_.DestroyDeviceObjects();
@@ -378,6 +386,8 @@ void VulkanRenderManager::BeginFrame(bool enableProfiling) {
 	vkWaitForFences(device, 1, &frameData.fence, true, UINT64_MAX);
 	vkResetFences(device, 1, &frameData.fence);
 
+	frameData.readbackFenceUsed = false;
+
 	uint64_t queryResults[MAX_TIMESTAMP_QUERIES];
 
 	if (frameData.profilingEnabled_) {
@@ -425,7 +435,7 @@ void VulkanRenderManager::BeginFrame(bool enableProfiling) {
 	renderStepOffset_ = 0;
 
 	frameData.profile.timestampDescriptions.clear();
-	if (frameData_->profilingEnabled_) {
+	if (frameData.profilingEnabled_) {
 		// For various reasons, we need to always use an init cmd buffer in this case to perform the vkCmdResetQueryPool,
 		// unless we want to limit ourselves to only measure the main cmd buffer.
 		// Reserve the first two queries for initCmd.
@@ -456,7 +466,7 @@ VkCommandBuffer VulkanRenderManager::GetInitCmd() {
 }
 
 void VulkanRenderManager::BindFramebufferAsRenderTarget(VKRFramebuffer *fb, VKRRenderPassAction color, VKRRenderPassAction depth, VKRRenderPassAction stencil, uint32_t clearColor, float clearDepth, uint8_t clearStencil, const char *tag) {
-	assert(insideFrame_);
+	_dbg_assert_(insideFrame_);
 	// Eliminate dupes, instantly convert to a clear if possible.
 	if (!steps_.empty() && steps_.back()->stepType == VKRStepType::RENDER && steps_.back()->render.framebuffer == fb) {
 		u32 clearMask = 0;
@@ -571,7 +581,7 @@ void VulkanRenderManager::BindFramebufferAsRenderTarget(VKRFramebuffer *fb, VKRR
 }
 
 bool VulkanRenderManager::CopyFramebufferToMemorySync(VKRFramebuffer *src, int aspectBits, int x, int y, int w, int h, Draw::DataFormat destFormat, uint8_t *pixels, int pixelStride, const char *tag) {
-	assert(insideFrame_);
+	_dbg_assert_(insideFrame_);
 	for (int i = (int)steps_.size() - 1; i >= 0; i--) {
 		if (steps_[i]->stepType == VKRStepType::RENDER && steps_[i]->render.framebuffer == src) {
 			steps_[i]->render.numReads++;
@@ -633,7 +643,7 @@ bool VulkanRenderManager::CopyFramebufferToMemorySync(VKRFramebuffer *src, int a
 }
 
 void VulkanRenderManager::CopyImageToMemorySync(VkImage image, int mipLevel, int x, int y, int w, int h, Draw::DataFormat destFormat, uint8_t *pixels, int pixelStride, const char *tag) {
-	assert(insideFrame_);
+	_dbg_assert_(insideFrame_);
 	VKRStep *step = new VKRStep{ VKRStepType::READBACK_IMAGE };
 	step->readback_image.image = image;
 	step->readback_image.srcRect.offset = { x, y };
@@ -669,7 +679,7 @@ bool VulkanRenderManager::InitBackbufferFramebuffers(int width, int height) {
 	for (uint32_t i = 0; i < swapchainImageCount_; i++) {
 		attachments[0] = swapchainImages_[i].view;
 		res = vkCreateFramebuffer(vulkan_->GetDevice(), &fb_info, nullptr, &framebuffers_[i]);
-		assert(res == VK_SUCCESS);
+		_dbg_assert_(res == VK_SUCCESS);
 		if (res != VK_SUCCESS) {
 			framebuffers_.clear();
 			return false;
@@ -704,7 +714,7 @@ bool VulkanRenderManager::InitDepthStencilBuffer(VkCommandBuffer cmd) {
 
 	VkDevice device = vulkan_->GetDevice();
 	res = vkCreateImage(device, &image_info, nullptr, &depth_.image);
-	assert(res == VK_SUCCESS);
+	_dbg_assert_(res == VK_SUCCESS);
 	if (res != VK_SUCCESS)
 		return false;
 
@@ -726,17 +736,17 @@ bool VulkanRenderManager::InitDepthStencilBuffer(VkCommandBuffer cmd) {
 	pass = vulkan_->MemoryTypeFromProperties(mem_reqs.memoryTypeBits,
 		0, /* No requirements */
 		&mem_alloc.memoryTypeIndex);
-	assert(pass);
+	_dbg_assert_(pass);
 	if (!pass)
 		return false;
 
 	res = vkAllocateMemory(device, &mem_alloc, NULL, &depth_.mem);
-	assert(res == VK_SUCCESS);
+	_dbg_assert_(res == VK_SUCCESS);
 	if (res != VK_SUCCESS)
 		return false;
 
 	res = vkBindImageMemory(device, depth_.image, depth_.mem, 0);
-	assert(res == VK_SUCCESS);
+	_dbg_assert_(res == VK_SUCCESS);
 	if (res != VK_SUCCESS)
 		return false;
 
@@ -762,7 +772,7 @@ bool VulkanRenderManager::InitDepthStencilBuffer(VkCommandBuffer cmd) {
 	depth_view_info.flags = 0;
 
 	res = vkCreateImageView(device, &depth_view_info, NULL, &depth_.view);
-	assert(res == VK_SUCCESS);
+	_dbg_assert_(res == VK_SUCCESS);
 	if (res != VK_SUCCESS)
 		return false;
 
@@ -831,7 +841,7 @@ static void CleanupRenderCommands(std::vector<VkRenderData> *cmds) {
 }
 
 void VulkanRenderManager::Clear(uint32_t clearColor, float clearZ, int clearStencil, int clearMask) {
-	_dbg_assert_(G3D, curRenderStep_ && curRenderStep_->stepType == VKRStepType::RENDER);
+	_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == VKRStepType::RENDER);
 	if (!clearMask)
 		return;
 	// If this is the first drawing command or clears everything, merge it into the pass.
@@ -858,18 +868,18 @@ void VulkanRenderManager::Clear(uint32_t clearColor, float clearZ, int clearSten
 }
 
 void VulkanRenderManager::CopyFramebuffer(VKRFramebuffer *src, VkRect2D srcRect, VKRFramebuffer *dst, VkOffset2D dstPos, int aspectMask, const char *tag) {
-	_dbg_assert_msg_(G3D, srcRect.offset.x >= 0, "srcrect offset x (%d) < 0", srcRect.offset.x);
-	_dbg_assert_msg_(G3D, srcRect.offset.y >= 0, "srcrect offset y (%d) < 0", srcRect.offset.y);
-	_dbg_assert_msg_(G3D, srcRect.offset.x + srcRect.extent.width <= (uint32_t)src->width, "srcrect offset x (%d) + extent (%d) > width (%d)", srcRect.offset.x, srcRect.extent.width, (uint32_t)src->width);
-	_dbg_assert_msg_(G3D, srcRect.offset.y + srcRect.extent.height <= (uint32_t)src->height, "srcrect offset y (%d) + extent (%d) > height (%d)", srcRect.offset.y, srcRect.extent.height, (uint32_t)src->height);
+	_dbg_assert_msg_(srcRect.offset.x >= 0, "srcrect offset x (%d) < 0", srcRect.offset.x);
+	_dbg_assert_msg_(srcRect.offset.y >= 0, "srcrect offset y (%d) < 0", srcRect.offset.y);
+	_dbg_assert_msg_(srcRect.offset.x + srcRect.extent.width <= (uint32_t)src->width, "srcrect offset x (%d) + extent (%d) > width (%d)", srcRect.offset.x, srcRect.extent.width, (uint32_t)src->width);
+	_dbg_assert_msg_(srcRect.offset.y + srcRect.extent.height <= (uint32_t)src->height, "srcrect offset y (%d) + extent (%d) > height (%d)", srcRect.offset.y, srcRect.extent.height, (uint32_t)src->height);
 
-	_dbg_assert_msg_(G3D, srcRect.extent.width > 0, "copy srcwidth == 0");
-	_dbg_assert_msg_(G3D, srcRect.extent.height > 0, "copy srcheight == 0");
+	_dbg_assert_msg_(srcRect.extent.width > 0, "copy srcwidth == 0");
+	_dbg_assert_msg_(srcRect.extent.height > 0, "copy srcheight == 0");
 
-	_dbg_assert_msg_(G3D, dstPos.x >= 0, "dstPos offset x (%d) < 0", dstPos.x);
-	_dbg_assert_msg_(G3D, dstPos.y >= 0, "dstPos offset y (%d) < 0", dstPos.y);
-	_dbg_assert_msg_(G3D, dstPos.x + srcRect.extent.width <= (uint32_t)dst->width, "dstPos + extent x > width");
-	_dbg_assert_msg_(G3D, dstPos.y + srcRect.extent.height <= (uint32_t)dst->height, "dstPos + extent y > height");
+	_dbg_assert_msg_(dstPos.x >= 0, "dstPos offset x (%d) < 0", dstPos.x);
+	_dbg_assert_msg_(dstPos.y >= 0, "dstPos offset y (%d) < 0", dstPos.y);
+	_dbg_assert_msg_(dstPos.x + srcRect.extent.width <= (uint32_t)dst->width, "dstPos + extent x > width");
+	_dbg_assert_msg_(dstPos.y + srcRect.extent.height <= (uint32_t)dst->height, "dstPos + extent y > height");
 
 	for (int i = (int)steps_.size() - 1; i >= 0; i--) {
 		if (steps_[i]->stepType == VKRStepType::RENDER && steps_[i]->render.framebuffer == src) {
@@ -908,21 +918,21 @@ void VulkanRenderManager::CopyFramebuffer(VKRFramebuffer *src, VkRect2D srcRect,
 }
 
 void VulkanRenderManager::BlitFramebuffer(VKRFramebuffer *src, VkRect2D srcRect, VKRFramebuffer *dst, VkRect2D dstRect, int aspectMask, VkFilter filter, const char *tag) {
-	_dbg_assert_msg_(G3D, srcRect.offset.x >= 0, "srcrect offset x (%d) < 0", srcRect.offset.x);
-	_dbg_assert_msg_(G3D, srcRect.offset.y >= 0, "srcrect offset y (%d) < 0", srcRect.offset.y);
-	_dbg_assert_msg_(G3D, srcRect.offset.x + srcRect.extent.width <= (uint32_t)src->width, "srcrect offset x (%d) + extent (%d) > width (%d)", srcRect.offset.x, srcRect.extent.width, (uint32_t)src->width);
-	_dbg_assert_msg_(G3D, srcRect.offset.y + srcRect.extent.height <= (uint32_t)src->height, "srcrect offset y (%d) + extent (%d) > height (%d)", srcRect.offset.y, srcRect.extent.height, (uint32_t)src->height);
+	_dbg_assert_msg_(srcRect.offset.x >= 0, "srcrect offset x (%d) < 0", srcRect.offset.x);
+	_dbg_assert_msg_(srcRect.offset.y >= 0, "srcrect offset y (%d) < 0", srcRect.offset.y);
+	_dbg_assert_msg_(srcRect.offset.x + srcRect.extent.width <= (uint32_t)src->width, "srcrect offset x (%d) + extent (%d) > width (%d)", srcRect.offset.x, srcRect.extent.width, (uint32_t)src->width);
+	_dbg_assert_msg_(srcRect.offset.y + srcRect.extent.height <= (uint32_t)src->height, "srcrect offset y (%d) + extent (%d) > height (%d)", srcRect.offset.y, srcRect.extent.height, (uint32_t)src->height);
 
-	_dbg_assert_msg_(G3D, srcRect.extent.width > 0, "blit srcwidth == 0");
-	_dbg_assert_msg_(G3D, srcRect.extent.height > 0, "blit srcheight == 0");
+	_dbg_assert_msg_(srcRect.extent.width > 0, "blit srcwidth == 0");
+	_dbg_assert_msg_(srcRect.extent.height > 0, "blit srcheight == 0");
 
-	_dbg_assert_msg_(G3D, dstRect.offset.x >= 0, "dstrect offset x < 0");
-	_dbg_assert_msg_(G3D, dstRect.offset.y >= 0, "dstrect offset y < 0");
-	_dbg_assert_msg_(G3D, dstRect.offset.x + dstRect.extent.width <= (uint32_t)dst->width, "dstrect offset x + extent > width");
-	_dbg_assert_msg_(G3D, dstRect.offset.y + dstRect.extent.height <= (uint32_t)dst->height, "dstrect offset y + extent > height");
+	_dbg_assert_msg_(dstRect.offset.x >= 0, "dstrect offset x < 0");
+	_dbg_assert_msg_(dstRect.offset.y >= 0, "dstrect offset y < 0");
+	_dbg_assert_msg_(dstRect.offset.x + dstRect.extent.width <= (uint32_t)dst->width, "dstrect offset x + extent > width");
+	_dbg_assert_msg_(dstRect.offset.y + dstRect.extent.height <= (uint32_t)dst->height, "dstrect offset y + extent > height");
 
-	_dbg_assert_msg_(G3D, dstRect.extent.width > 0, "blit dstwidth == 0");
-	_dbg_assert_msg_(G3D, dstRect.extent.height > 0, "blit dstheight == 0");
+	_dbg_assert_msg_(dstRect.extent.width > 0, "blit dstwidth == 0");
+	_dbg_assert_msg_(dstRect.extent.height > 0, "blit dstheight == 0");
 
 	for (int i = (int)steps_.size() - 1; i >= 0; i--) {
 		if (steps_[i]->stepType == VKRStepType::RENDER && steps_[i]->render.framebuffer == src) {
@@ -951,7 +961,7 @@ void VulkanRenderManager::BlitFramebuffer(VKRFramebuffer *src, VkRect2D srcRect,
 }
 
 VkImageView VulkanRenderManager::BindFramebufferAsTexture(VKRFramebuffer *fb, int binding, int aspectBit, int attachment) {
-	_dbg_assert_(G3D, curRenderStep_ != nullptr);
+	_dbg_assert_(curRenderStep_ != nullptr);
 	// Mark the dependency, check for required transitions, and return the image.
 
 	for (int i = (int)steps_.size() - 1; i >= 0; i--) {
@@ -1030,17 +1040,17 @@ void VulkanRenderManager::BeginSubmitFrame(int frame) {
 			// Hopefully the resize will happen shortly. Ignore - one frame might look bad or something.
 			WLOG("VK_SUBOPTIMAL_KHR returned - ignoring");
 		} else if (res == VK_ERROR_OUT_OF_DATE_KHR) {
-			WLOG("VK_ERROR_OUT_OF_DATE_KHR returned - not presenting");
+			WLOG("VK_ERROR_OUT_OF_DATE_KHR returned - processing the frame, but not presenting");
 			frameData.skipSwap = true;
 		} else {
-			_assert_msg_(G3D, res == VK_SUCCESS, "vkAcquireNextImageKHR failed! result=%s", VulkanResultToString(res));
+			_assert_msg_(res == VK_SUCCESS, "vkAcquireNextImageKHR failed! result=%s", VulkanResultToString(res));
 		}
 
 		VkCommandBufferBeginInfo begin{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 		res = vkBeginCommandBuffer(frameData.mainCmd, &begin);
 
-		_assert_msg_(G3D, res == VK_SUCCESS, "vkBeginCommandBuffer failed! result=%s", VulkanResultToString(res));
+		_assert_msg_(res == VK_SUCCESS, "vkBeginCommandBuffer failed! result=%s", VulkanResultToString(res));
 
 		queueRunner_.SetBackbuffer(framebuffers_[frameData.curSwapchainImage], swapchainImages_[frameData.curSwapchainImage].image);
 
@@ -1048,25 +1058,24 @@ void VulkanRenderManager::BeginSubmitFrame(int frame) {
 	}
 }
 
-void VulkanRenderManager::Submit(int frame, bool triggerFence) {
+void VulkanRenderManager::Submit(int frame, bool triggerFrameFence) {
 	FrameData &frameData = frameData_[frame];
 	if (frameData.hasInitCommands) {
-		if (frameData.profilingEnabled_ && triggerFence) {
+		if (frameData.profilingEnabled_ && triggerFrameFence) {
 			// Pre-allocated query ID 1.
 			vkCmdWriteTimestamp(frameData.initCmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, frameData.profile.queryPool, 1);
 		}
 		VkResult res = vkEndCommandBuffer(frameData.initCmd);
-		_assert_msg_(G3D, res == VK_SUCCESS, "vkEndCommandBuffer failed (init)! result=%s", VulkanResultToString(res));
+		_assert_msg_(res == VK_SUCCESS, "vkEndCommandBuffer failed (init)! result=%s", VulkanResultToString(res));
 	}
 
 	VkResult res = vkEndCommandBuffer(frameData.mainCmd);
-	_assert_msg_(G3D, res == VK_SUCCESS, "vkEndCommandBuffer failed (main)! result=%s", VulkanResultToString(res));
+	_assert_msg_(res == VK_SUCCESS, "vkEndCommandBuffer failed (main)! result=%s", VulkanResultToString(res));
 
 	VkCommandBuffer cmdBufs[2];
 	int numCmdBufs = 0;
 	if (frameData.hasInitCommands) {
 		cmdBufs[numCmdBufs++] = frameData.initCmd;
-		frameData.hasInitCommands = false;
 		if (splitSubmit_) {
 			// Send the init commands off separately. Used this once to confirm that the cause of a device loss was in the init cmdbuf.
 			VkSubmitInfo submit_info{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -1074,13 +1083,9 @@ void VulkanRenderManager::Submit(int frame, bool triggerFence) {
 			submit_info.pCommandBuffers = cmdBufs;
 			res = vkQueueSubmit(vulkan_->GetGraphicsQueue(), 1, &submit_info, VK_NULL_HANDLE);
 			if (res == VK_ERROR_DEVICE_LOST) {
-#ifdef _WIN32
-				_assert_msg_(G3D, false, "Lost the Vulkan device! If this happens again, switch Graphics Backend from Vulkan to Direct3D11");
-#else
-				_assert_msg_(G3D, false, "Lost the Vulkan device! If this happens again, switch Graphics Backend from Vulkan to OpenGL");
-#endif
+				_assert_msg_(false, "Lost the Vulkan device in split submit! If this happens again, switch Graphics Backend away from Vulkan");
 			} else {
-				_assert_msg_(G3D, res == VK_SUCCESS, "vkQueueSubmit failed (init)! result=%s", VulkanResultToString(res));
+				_assert_msg_(res == VK_SUCCESS, "vkQueueSubmit failed (init)! result=%s", VulkanResultToString(res));
 			}
 			numCmdBufs = 0;
 		}
@@ -1089,35 +1094,33 @@ void VulkanRenderManager::Submit(int frame, bool triggerFence) {
 
 	VkSubmitInfo submit_info{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
 	VkPipelineStageFlags waitStage[1]{ VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	if (triggerFence && !frameData.skipSwap) {
+	if (triggerFrameFence && !frameData.skipSwap) {
 		submit_info.waitSemaphoreCount = 1;
 		submit_info.pWaitSemaphores = &acquireSemaphore_;
 		submit_info.pWaitDstStageMask = waitStage;
 	}
 	submit_info.commandBufferCount = (uint32_t)numCmdBufs;
 	submit_info.pCommandBuffers = cmdBufs;
-	if (triggerFence && !frameData.skipSwap) {
+	if (triggerFrameFence && !frameData.skipSwap) {
 		submit_info.signalSemaphoreCount = 1;
 		submit_info.pSignalSemaphores = &renderingCompleteSemaphore_;
 	}
-	res = vkQueueSubmit(vulkan_->GetGraphicsQueue(), 1, &submit_info, triggerFence ? frameData.fence : VK_NULL_HANDLE);
+	res = vkQueueSubmit(vulkan_->GetGraphicsQueue(), 1, &submit_info, triggerFrameFence ? frameData.fence : frameData.readbackFence);
 	if (res == VK_ERROR_DEVICE_LOST) {
-#ifdef _WIN32
-		_assert_msg_(G3D, false, "Lost the Vulkan device! If this happens again, switch Graphics Backend from Vulkan to Direct3D11");
-#else
-		_assert_msg_(G3D, false, "Lost the Vulkan device! If this happens again, switch Graphics Backend from Vulkan to OpenGL");
-#endif
+		_assert_msg_(false, "Lost the Vulkan device in vkQueueSubmit! If this happens again, switch Graphics Backend away from Vulkan");
 	} else {
-		_assert_msg_(G3D, res == VK_SUCCESS, "vkQueueSubmit failed (main, split=%d)! result=%s", (int)splitSubmit_, VulkanResultToString(res));
+		_assert_msg_(res == VK_SUCCESS, "vkQueueSubmit failed (main, split=%d)! result=%s", (int)splitSubmit_, VulkanResultToString(res));
 	}
 
 	// When !triggerFence, we notify after syncing with Vulkan.
-	if (useThread_ && triggerFence) {
+	if (useThread_ && triggerFrameFence) {
 		VLOG("PULL: Frame %d.readyForFence = true", frame);
 		std::unique_lock<std::mutex> lock(frameData.push_mutex);
 		frameData.readyForFence = true;
 		frameData.push_condVar.notify_all();
 	}
+
+	frameData.hasInitCommands = false;
 }
 
 void VulkanRenderManager::EndSubmitFrame(int frame) {
@@ -1136,13 +1139,21 @@ void VulkanRenderManager::EndSubmitFrame(int frame) {
 		present.waitSemaphoreCount = 1;
 
 		VkResult res = vkQueuePresentKHR(vulkan_->GetGraphicsQueue(), &present);
-		// TODO: Deal with VK_SUBOPTIMAL_KHR ?
-		if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
-			// ignore, it'll be fine. this happens sometimes during resizes, and we do make sure to recreate the swap chain.
+		if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+			// We clearly didn't get this in vkAcquireNextImageKHR because of the skipSwap check above.
+			// Do the increment.
+			outOfDateFrames_++;
+		} else if (res == VK_SUBOPTIMAL_KHR) {
+			outOfDateFrames_++;
+		} else if (res != VK_SUCCESS) {
+			_assert_msg_(false, "vkQueuePresentKHR failed! result=%s", VulkanResultToString(res));
 		} else {
-			_assert_msg_(G3D, res == VK_SUCCESS, "vkQueuePresentKHR failed! result=%s", VulkanResultToString(res));
+			// Success
+			outOfDateFrames_ = 0;
 		}
 	} else {
+		// We only get here if vkAcquireNextImage returned VK_ERROR_OUT_OF_DATE.
+		outOfDateFrames_++;
 		frameData.skipSwap = false;
 	}
 }
@@ -1167,7 +1178,7 @@ void VulkanRenderManager::Run(int frame) {
 		break;
 
 	default:
-		assert(false);
+		_dbg_assert_(false);
 	}
 
 	VLOG("PULL: Finished running frame %d", frame);
@@ -1175,11 +1186,15 @@ void VulkanRenderManager::Run(int frame) {
 
 void VulkanRenderManager::EndSyncFrame(int frame) {
 	FrameData &frameData = frameData_[frame];
+
+	frameData.readbackFenceUsed = true;
+
+	// The submit will trigger the readbackFence.
 	Submit(frame, false);
 
-	// This is brutal! Should probably wait for a fence instead, not that it'll matter much since we'll
-	// still stall everything.
-	vkDeviceWaitIdle(vulkan_->GetDevice());
+	// Hard stall of the GPU, not ideal, but necessary so the CPU has the contents of the readback.
+	vkWaitForFences(vulkan_->GetDevice(), 1, &frameData.readbackFence, true, UINT64_MAX);
+	vkResetFences(vulkan_->GetDevice(), 1, &frameData.readbackFence);
 
 	// At this point we can resume filling the command buffers for the current frame since
 	// we know the device is idle - and thus all previously enqueued command buffers have been processed.
@@ -1215,7 +1230,7 @@ void VulkanRenderManager::FlushSync() {
 		frameData.steps = std::move(steps_);
 		steps_.clear();
 		frameData.readyForRun = true;
-		assert(frameData.readyForFence == false);
+		_dbg_assert_(!frameData.readyForFence);
 		frameData.type = VKRRunType::SYNC;
 		frameData.pull_condVar.notify_all();
 	}

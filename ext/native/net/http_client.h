@@ -71,9 +71,9 @@ public:
 
 	// HEAD, PUT, DELETE aren't implemented yet, but can be done with SendRequest.
 
-	int SendRequest(const char *method, const char *resource, const char *otherHeaders = nullptr, float *progress = nullptr);
-	int SendRequestWithData(const char *method, const char *resource, const std::string &data, const char *otherHeaders = nullptr, float *progress = nullptr);
-	int ReadResponseHeaders(Buffer *readbuf, std::vector<std::string> &responseHeaders, float *progress = nullptr);
+	int SendRequest(const char *method, const char *resource, const char *otherHeaders = nullptr, float *progress = nullptr, bool *cancelled = nullptr);
+	int SendRequestWithData(const char *method, const char *resource, const std::string &data, const char *otherHeaders = nullptr, float *progress = nullptr, bool *cancelled = nullptr);
+	int ReadResponseHeaders(Buffer *readbuf, std::vector<std::string> &responseHeaders, float *progress = nullptr, bool *cancelled = nullptr);
 	// If your response contains a response, you must read it.
 	int ReadResponseEntity(Buffer *readbuf, const std::vector<std::string> &responseHeaders, Buffer *output, float *progress = nullptr, bool *cancelled = nullptr);
 
@@ -93,9 +93,9 @@ public:
 	Download(const std::string &url, const std::string &outfile);
 	~Download();
 
-	// Keeps around an instance of the shared_ptr, so that it doesn't get destructed
-	// until done.
-	void Start(std::shared_ptr<Download> self);
+	void Start();
+
+	void Join();
 
 	// Returns 1.0 when done. That one value can be compared exactly - or just use Done().
 	float Progress() const { return progress_; }
@@ -138,7 +138,7 @@ public:
 	void SetHidden(bool hidden) { hidden_ = hidden; }
 
 private:
-	void Do(std::shared_ptr<Download> self);  // Actually does the download. Runs on thread.
+	void Do();  // Actually does the download. Runs on thread.
 	int PerformGET(const std::string &url);
 	std::string RedirectLocation(const std::string &baseUrl);
 	void SetFailed(int code);
@@ -153,6 +153,7 @@ private:
 	bool failed_ = false;
 	bool cancelled_ = false;
 	bool hidden_ = false;
+	bool joined_ = false;
 	std::function<void(Download &)> callback_;
 };
 

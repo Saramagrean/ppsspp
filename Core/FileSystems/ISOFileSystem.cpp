@@ -461,10 +461,18 @@ int ISOFileSystem::Ioctl(u32 handle, u32 cmd, u32 indataPtr, u32 inlen, u32 outd
 	return SCE_KERNEL_ERROR_ERRNO_FUNCTION_NOT_SUPPORTED;
 }
 
-int ISOFileSystem::DevType(u32 handle)
-{
+PSPDevType ISOFileSystem::DevType(u32 handle) {
 	EntryMap::iterator iter = entries.find(handle);
-	return iter->second.isBlockSectorMode ? PSP_DEV_TYPE_BLOCK : PSP_DEV_TYPE_FILE;
+	PSPDevType type = iter->second.isBlockSectorMode ? PSPDevType::BLOCK : PSPDevType::FILE;
+	if (iter->second.isRawSector)
+		type |= PSPDevType::EMU_LBN;
+	return type;
+}
+
+FileSystemFlags ISOFileSystem::Flags() {
+	// TODO: Here may be a good place to force things, in case users recompress games
+	// as PBP or CSO when they were originally the other type.
+	return blockDevice->IsDisc() ? FileSystemFlags::UMD : FileSystemFlags::CARD;
 }
 
 size_t ISOFileSystem::ReadFile(u32 handle, u8 *pointer, s64 size)
@@ -527,7 +535,9 @@ size_t ISOFileSystem::ReadFile(u32 handle, u8 *pointer, s64 size, int &usec) {
 		u32 secNum = (u32)(positionOnIso / 2048);
 		u8 theSector[2048];
 
-		_dbg_assert_msg_(FILESYS, (middleSize & 2047) == 0, "Remaining size should be aligned");
+		if ((middleSize & 2047) != 0) {
+			ERROR_LOG(FILESYS, "Remaining size should be aligned");
+		}
 
 		const u8 *const start = pointer;
 		if (firstBlockSize > 0) {
@@ -607,7 +617,9 @@ PSPFileInfo ISOFileSystem::GetFileInfo(std::string filename) {
 		PSPFileInfo fileInfo;
 		fileInfo.name = filename;
 		fileInfo.exists = true;
+		fileInfo.type = FILETYPE_NORMAL;
 		fileInfo.size = readSize;
+		fileInfo.access = 0444;
 		fileInfo.startSector = sectorStart;
 		fileInfo.isOnSectorSystem = true;
 		fileInfo.numSectors = (readSize + sectorSize - 1) / sectorSize;
@@ -616,12 +628,10 @@ PSPFileInfo ISOFileSystem::GetFileInfo(std::string filename) {
 
 	TreeEntry *entry = GetFromPath(filename, false);
 	PSPFileInfo x; 
-	if (!entry) {
-		x.size = 0;
-		x.exists = false;
-	} else {
+	if (entry) {
 		x.name = entry->name;
-		x.access = FILEACCESS_READ;
+		// Strangely, it seems to be executable even for files.
+		x.access = 0555;
 		x.size = entry->size;
 		x.exists = true;
 		x.type = entry->isDirectory ? FILETYPE_DIRECTORY : FILETYPE_NORMAL;
@@ -649,16 +659,14 @@ std::vector<PSPFileInfo> ISOFileSystem::GetDirListing(std::string path) {
 
 		PSPFileInfo x;
 		x.name = e->name;
-		x.access = FILEACCESS_READ;
+		// Strangely, it seems to be executable even for files.
+		x.access = 0555;
 		x.size = e->size;
 		x.type = e->isDirectory ? FILETYPE_DIRECTORY : FILETYPE_NORMAL;
 		x.isOnSectorSystem = true;
 		x.startSector = e->startingPosition/2048;
 		x.sectorSize = sectorSize;
 		x.numSectors = (u32)((e->size + sectorSize - 1) / sectorSize);
-		memset(&x.atime, 0, sizeof(x.atime));
-		memset(&x.mtime, 0, sizeof(x.mtime));
-		memset(&x.ctime, 0, sizeof(x.ctime));
 		myVector.push_back(x);
 	}
 	return myVector;

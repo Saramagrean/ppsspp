@@ -111,8 +111,6 @@ FramebufferManagerGLES::FramebufferManagerGLES(Draw::DrawContext *draw, GLRender
 
 void FramebufferManagerGLES::Init() {
 	FramebufferManagerCommon::Init();
-	// Workaround for upscaling shaders where we force x1 resolution without saving it
-	Resized();
 	CompileDraw2DProgram();
 }
 
@@ -314,7 +312,7 @@ void FramebufferManagerGLES::BindFramebufferAsColorTexture(int stage, VirtualFra
 }
 
 void FramebufferManagerGLES::UpdateDownloadTempBuffer(VirtualFramebuffer *nvfb) {
-	_assert_msg_(G3D, nvfb->fbo, "Expecting a valid nvfb in UpdateDownloadTempBuffer");
+	_assert_msg_(nvfb->fbo, "Expecting a valid nvfb in UpdateDownloadTempBuffer");
 
 	// Discard the previous contents of this buffer where possible.
 	if (gl_extensions.GLES3) {

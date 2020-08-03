@@ -39,7 +39,7 @@
 #include "util/text/utf8.h"
 
 #include "Common/GraphicsContext.h"
-#include "Core/MemMap.h"
+#include "Core/MemFault.h"
 #include "Core/HDRemaster.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSAnalyst.h"
@@ -62,6 +62,7 @@
 #include "Core/ELF/ParamSFO.h"
 #include "Core/SaveState.h"
 #include "Common/LogManager.h"
+#include "Common/ExceptionHandlerSetup.h"
 #include "Core/HLE/sceAudiocodec.h"
 
 #include "GPU/GPUState.h"
@@ -97,12 +98,18 @@ bool coreCollectDebugStatsForced = false;
 
 // This can be read and written from ANYWHERE.
 volatile CoreState coreState = CORE_STEPPING;
-// Note: intentionally not used for CORE_NEXTFRAME.
+// If true, core state has been changed, but JIT has probably not noticed yet.
 volatile bool coreStatePending = false;
+
 static volatile CPUThreadState cpuThreadState = CPU_THREAD_NOT_RUNNING;
 
 static GPUBackend gpuBackend;
 static std::string gpuBackendDevice;
+
+// Ugly!
+static bool pspIsInited = false;
+static bool pspIsIniting = false;
+static bool pspIsQuitting = false;
 
 void ResetUIState() {
 	globalUIState = UISTATE_MENU;
@@ -177,7 +184,7 @@ bool CPU_HasPendingAction() {
 
 void CPU_Shutdown();
 
-void CPU_Init() {
+bool CPU_Init() {
 	coreState = CORE_POWERUP;
 	currentMIPS = &mipsr4k;
 
@@ -236,7 +243,10 @@ void CPU_Init() {
 	std::string discID = g_paramSFO.GetDiscID();
 	coreParameter.compat.Load(discID);
 
-	Memory::Init();
+	if (!Memory::Init()) {
+		// We're screwed.
+		return false;
+	}
 	mipsr4k.Reset();
 
 	host->AttemptLoadSymbolMap();
@@ -257,13 +267,15 @@ void CPU_Init() {
 	if (!LoadFile(&loadedFile, &coreParameter.errorString)) {
 		CPU_Shutdown();
 		coreParameter.fileToStart = "";
-		return;
+		return false;
 	}
-
 
 	if (coreParameter.updateRecent) {
 		g_Config.AddRecent(filename);
 	}
+
+	InstallExceptionHandler(&Memory::HandleFault);
+	return true;
 }
 
 PSP_LoadingLock::PSP_LoadingLock() {
@@ -275,6 +287,8 @@ PSP_LoadingLock::~PSP_LoadingLock() {
 }
 
 void CPU_Shutdown() {
+	UninstallExceptionHandler();
+
 	// Since we load on a background thread, wait for startup to complete.
 	PSP_LoadingLock lock;
 	PSPLoaders_Shutdown();
@@ -328,11 +342,6 @@ void Core_UpdateDebugStats(bool collectStats) {
 	gpuStats.ResetFrame();
 }
 
-// Ugly!
-static bool pspIsInited = false;
-static bool pspIsIniting = false;
-static bool pspIsQuitting = false;
-
 bool PSP_InitStart(const CoreParameter &coreParam, std::string *error_string) {
 	if (pspIsIniting || pspIsQuitting) {
 		return false;
@@ -356,7 +365,10 @@ bool PSP_InitStart(const CoreParameter &coreParam, std::string *error_string) {
 	pspIsIniting = true;
 	PSP_SetLoading("Loading game...");
 
-	CPU_Init();
+	if (!CPU_Init()) {
+		*error_string = "Failed initializing CPU/Memory";
+		return false;
+	}
 
 	// Compat flags get loaded in CPU_Init (which is a bit of a misnomer) so we check for SW renderer here.
 	if (g_Config.bSoftwareRendering || PSP_CoreParameter().compat.flags().ForceSoftwareRenderer) {
@@ -433,7 +445,7 @@ void PSP_Shutdown() {
 	// Make sure things know right away that PSP memory, etc. is going away.
 	pspIsQuitting = true;
 	if (coreState == CORE_RUNNING)
-		Core_UpdateState(CORE_ERROR);
+		Core_UpdateState(CORE_POWERDOWN);
 
 #ifndef MOBILE_DEVICE
 	if (g_Config.bFuncHashMap) {
@@ -486,7 +498,7 @@ void PSP_RunLoopWhileState() {
 
 void PSP_RunLoopUntil(u64 globalticks) {
 	SaveState::Process();
-	if (coreState == CORE_POWERDOWN || coreState == CORE_ERROR) {
+	if (coreState == CORE_POWERDOWN || coreState == CORE_BOOT_ERROR || coreState == CORE_RUNTIME_ERROR) {
 		return;
 	} else if (coreState == CORE_STEPPING) {
 		Core_ProcessStepping();

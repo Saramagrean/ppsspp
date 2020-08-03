@@ -948,7 +948,7 @@ void MIPSInterpret(MIPSOpcode op) {
 		// Try to disassemble it
 		char disasm[256];
 		MIPSDisAsm(op, currentMIPS->pc, disasm);
-		_dbg_assert_msg_(CPU, 0, "%s", disasm);
+		_dbg_assert_msg_( 0, "%s", disasm);
 		currentMIPS->pc += 4;
 	}
 }
@@ -1019,13 +1019,14 @@ int MIPSInterpret_RunUntil(u64 globalTicks)
 
 				if (curMips->inDelaySlot)
 				{
+					curMips->downcount -= 1;
 					// The reason we have to check this is the delay slot hack in Int_Syscall.
 					if (wasInDelaySlot)
 					{
 						curMips->pc = curMips->nextPC;
 						curMips->inDelaySlot = false;
+						continue;
 					}
-					curMips->downcount -= 1;
 					goto again;
 				}
 			}

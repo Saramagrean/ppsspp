@@ -42,6 +42,7 @@
 #include "Core/CoreParameter.h"
 #include "Core/Host.h"
 #include "Core/Reporting.h"
+#include "Core/Core.h"
 #include "Core/System.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
@@ -560,7 +561,7 @@ static void DoFrameTiming(bool &throttle, bool &skipFrame, float timestep) {
 	// we have nothing to do here.
 	bool doFrameSkip = g_Config.iFrameSkip != 0;
 
-	bool unthrottleNeedsSkip = g_Config.bFrameSkipUnthrottle;
+	bool unthrottleNeedsSkip = g_Config.iUnthrottleMode == (int)UnthrottleMode::SKIP_DRAW;
 	if (g_Config.bVSync && GetGPUBackend() == GPUBackend::VULKAN) {
 		// Vulkan doesn't support the interval setting, so we force frameskip.
 		unthrottleNeedsSkip = true;
@@ -754,12 +755,21 @@ void __DisplayFlip(int cyclesLate) {
 	// Also let's always flip for animated shaders.
 	const ShaderInfo *shaderInfo = g_Config.sPostShaderName == "Off" ? nullptr : GetPostShaderInfo(g_Config.sPostShaderName);
 	bool postEffectRequiresFlip = false;
+
+	bool duplicateFrames = g_Config.bRenderDuplicateFrames && g_Config.iFrameSkip == 0;
+
+	bool unthrottleNeedsSkip = g_Config.iUnthrottleMode != (int)UnthrottleMode::CONTINUOUS;
+	if (g_Config.bVSync && GetGPUBackend() == GPUBackend::VULKAN) {
+		// Vulkan doesn't support the interval setting, so we force frameskip.
+		unthrottleNeedsSkip = true;
+	}
+
 	// postEffectRequiresFlip is not compatible with frameskip unthrottling, see #12325.
-	if (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && !(g_Config.bFrameSkipUnthrottle && !FrameTimingThrottled())) {
+	if (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE && !(unthrottleNeedsSkip && !FrameTimingThrottled())) {
 		if (shaderInfo) {
-			postEffectRequiresFlip = (shaderInfo->requires60fps || g_Config.bRenderDuplicateFrames);
+			postEffectRequiresFlip = (shaderInfo->requires60fps || duplicateFrames);
 		} else {
-			postEffectRequiresFlip = g_Config.bRenderDuplicateFrames;
+			postEffectRequiresFlip = duplicateFrames;
 		}
 	}
 
@@ -784,12 +794,24 @@ void __DisplayFlip(int cyclesLate) {
 			hasNotifiedSlow = true;
 		}
 
+		bool forceNoFlip = false;
+		// Alternative to frameskip unthrottle, where we draw everything.
+		// Useful if skipping a frame breaks graphics or for checking drawing speed.
+		if (g_Config.iUnthrottleMode == (int)UnthrottleMode::SKIP_FLIP && !FrameTimingThrottled()) {
+			static double lastFlip = 0;
+			double now = time_now_d();
+			if ((now - lastFlip) < 1.0f / System_GetPropertyFloat(SYSPROP_DISPLAY_REFRESH_RATE)) {
+				forceNoFlip = true;
+			} else {
+				lastFlip = now;
+			}
+		}
+
 		// Setting CORE_NEXTFRAME causes a swap.
 		const bool fbReallyDirty = gpu->FramebufferReallyDirty();
 		if (fbReallyDirty || noRecentFlip || postEffectRequiresFlip) {
 			// Check first though, might've just quit / been paused.
-			if (coreState == CORE_RUNNING) {
-				coreState = CORE_NEXTFRAME;
+			if (!forceNoFlip && Core_NextFrame()) {
 				gpu->CopyDisplayToOutput(fbReallyDirty);
 				if (fbReallyDirty) {
 					actualFlips++;

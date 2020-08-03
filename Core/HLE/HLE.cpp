@@ -112,7 +112,7 @@ void hleDelayResultFinish(u64 userdata, int cycleslate)
 		__KernelReSchedule("woke from hle delay");
 	}
 	else
-		WARN_LOG(HLE, "Someone else woke up HLE-blocked thread?");
+		WARN_LOG(HLE, "Someone else woke up HLE-blocked thread %d?", threadID);
 }
 
 void HLEInit() {
@@ -215,7 +215,7 @@ const HLEFunction *GetFunc(const char *moduleName, u32 nib)
 
 const char *GetFuncName(const char *moduleName, u32 nib)
 {
-	_dbg_assert_msg_(HLE, moduleName != NULL, "Invalid module name.");
+	_dbg_assert_msg_(moduleName != nullptr, "Invalid module name.");
 
 	const HLEFunction *func = GetFunc(moduleName,nib);
 	if (func)
@@ -314,7 +314,7 @@ void hleCheckCurrentCallbacks()
 void hleReSchedule(const char *reason)
 {
 #ifdef _DEBUG
-	_dbg_assert_msg_(HLE, reason != nullptr && strlen(reason) < 256, "hleReSchedule: Invalid or too long reason.");
+	_dbg_assert_msg_(reason != nullptr && strlen(reason) < 256, "hleReSchedule: Invalid or too long reason.");
 #endif
 
 	hleAfterSyscall |= HLE_AFTER_RESCHED;
@@ -469,7 +469,7 @@ void HLEReturnFromMipsCall() {
 
 	if ((stackData->nextOff & 0x0000000F) != 0 || !Memory::IsValidAddress(sp + stackData->nextOff)) {
 		ERROR_LOG(HLE, "Corrupt stack on HLE mips call return: %08x", stackData->nextOff);
-		Core_UpdateState(CORE_ERROR);
+		Core_UpdateState(CORE_RUNTIME_ERROR);
 		return;
 	}
 
@@ -482,9 +482,10 @@ void HLEReturnFromMipsCall() {
 		while ((finalMarker->nextOff & 0x0000000F) == 0 && Memory::IsValidAddress(finalMarker.ptr + finalMarker->nextOff)) {
 			finalMarker.ptr += finalMarker->nextOff;
 		}
+
 		if (finalMarker->nextOff != 0xFFFFFFFF) {
 			ERROR_LOG(HLE, "Corrupt stack on HLE mips call return action: %08x", finalMarker->nextOff);
-			Core_UpdateState(CORE_ERROR);
+			Core_UpdateState(CORE_RUNTIME_ERROR);
 			return;
 		}
 
@@ -819,7 +820,7 @@ size_t hleFormatLogArgs(char *message, size_t sz, const char *argmask) {
 		// TODO: Double?  Does it ever happen?
 
 		default:
-			_dbg_assert_msg_(HLE, false, "Invalid argmask character: %c", argmask[i]);
+			_dbg_assert_msg_(false, "Invalid argmask character: %c", argmask[i]);
 			APPEND_FMT(" -- invalid arg format: %c -- %08x", argmask[i], regval);
 			break;
 		}
@@ -843,7 +844,7 @@ void hleDoLogInternal(LogTypes::LOG_TYPE t, LogTypes::LOG_LEVELS level, u64 res,
 	const char *funcName = "?";
 	u32 funcFlags = 0;
 	if (latestSyscall) {
-		_dbg_assert_(HLE, latestSyscall->argmask != nullptr);
+		_dbg_assert_(latestSyscall->argmask != nullptr);
 		hleFormatLogArgs(formatted_args, sizeof(formatted_args), latestSyscall->argmask);
 
 		// This acts as an override (for error returns which are usually hex.)
@@ -865,7 +866,7 @@ void hleDoLogInternal(LogTypes::LOG_TYPE t, LogTypes::LOG_LEVELS level, u64 res,
 		// TODO: For now, floats are just shown as bits.
 		fmt = "%s%08x=%s(%s)%s";
 	} else {
-		_dbg_assert_msg_(HLE, false, "Invalid return format: %c", retmask);
+		_dbg_assert_msg_(false, "Invalid return format: %c", retmask);
 		fmt = "%s%08llx=%s(%s)%s";
 	}
 

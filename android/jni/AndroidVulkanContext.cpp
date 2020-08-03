@@ -13,36 +13,7 @@
 #include "Core/ConfigValues.h"
 #include "Core/System.h"
 
-static VulkanLogOptions g_LogOptions;
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan_Dbg(VkDebugReportFlagsEXT msgFlags, VkDebugReportObjectTypeEXT objType, uint64_t srcObject, size_t location, int32_t msgCode, const char* pLayerPrefix, const char* pMsg, void *pUserData) {
-	const VulkanLogOptions *options = (const VulkanLogOptions *)pUserData;
-	int loglevel = ANDROID_LOG_INFO;
-	if (msgFlags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-		loglevel = ANDROID_LOG_ERROR;
-	} else if (msgFlags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-		loglevel = ANDROID_LOG_WARN;
-	} else if (msgFlags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-		loglevel = ANDROID_LOG_WARN;
-	} else if (msgFlags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-		loglevel = ANDROID_LOG_WARN;
-	} else if (msgFlags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-		loglevel = ANDROID_LOG_WARN;
-	}
-
-	__android_log_print(loglevel, APP_NAME, "[%s] %s Code %d : %s",
-						pLayerPrefix, VulkanObjTypeToString(objType), msgCode, pMsg);
-
-	// false indicates that layer should not bail-out of an
-	// API call that had validation failures. This may mean that the
-	// app dies inside the driver due to invalid parameter(s).
-	// That's what would happen without validation layers, so we'll
-	// keep that behavior here.
-	return false;
-}
-
-AndroidVulkanContext::AndroidVulkanContext() {
-}
+AndroidVulkanContext::AndroidVulkanContext() {}
 
 AndroidVulkanContext::~AndroidVulkanContext() {
 	delete g_Vulkan;
@@ -100,7 +71,6 @@ bool AndroidVulkanContext::InitAPI() {
 	}
 
 	g_Vulkan->ChooseDevice(physicalDevice);
-	// Here we can enable device extensions if we like.
 
 	ILOG("Creating Vulkan device");
 	if (g_Vulkan->CreateDevice() != VK_SUCCESS) {
@@ -111,6 +81,7 @@ bool AndroidVulkanContext::InitAPI() {
 		g_Vulkan = nullptr;
 		return false;
 	}
+
 	ILOG("Vulkan device created!");
 	return true;
 }
@@ -128,17 +99,12 @@ bool AndroidVulkanContext::InitFromRenderThread(ANativeWindow *wnd, int desiredB
 		return false;
 	}
 
-	if (g_validate_) {
-		int bits = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-		g_Vulkan->InitDebugMsgCallback(&Vulkan_Dbg, bits, &g_LogOptions);
-	}
-
 	bool success = true;
-	if (g_Vulkan->InitObjects()) {
+	if (g_Vulkan->InitSwapchain()) {
 		draw_ = Draw::T3DCreateVulkanContext(g_Vulkan, g_Config.bGfxDebugSplitSubmit);
 		SetGPUBackend(GPUBackend::VULKAN);
 		success = draw_->CreatePresets();  // Doesn't fail, we ship the compiler.
-		_assert_msg_(G3D, success, "Failed to compile preset shaders");
+		_assert_msg_(success, "Failed to compile preset shaders");
 		draw_->HandleEvent(Draw::Event::GOT_BACKBUFFER, g_Vulkan->GetBackbufferWidth(), g_Vulkan->GetBackbufferHeight());
 
 		VulkanRenderManager *renderManager = (VulkanRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
@@ -150,11 +116,9 @@ bool AndroidVulkanContext::InitFromRenderThread(ANativeWindow *wnd, int desiredB
 
 	ILOG("AndroidVulkanContext::Init completed, %s", success ? "successfully" : "but failed");
 	if (!success) {
-		g_Vulkan->DestroyObjects();
+		g_Vulkan->DestroySwapchain();
+		g_Vulkan->DestroySurface();
 		g_Vulkan->DestroyDevice();
-		g_Vulkan->DestroyDebugUtilsCallback();
-		g_Vulkan->DestroyDebugMsgCallback();
-
 		g_Vulkan->DestroyInstance();
 	}
 	return success;
@@ -167,16 +131,14 @@ void AndroidVulkanContext::ShutdownFromRenderThread() {
 	draw_ = nullptr;
 	g_Vulkan->WaitUntilQueueIdle();
 	g_Vulkan->PerformPendingDeletes();
-	g_Vulkan->DestroyObjects();  // Also destroys the surface, a bit asymmetric
+	g_Vulkan->DestroySwapchain();
+	g_Vulkan->DestroySurface();
 	ILOG("Done with ShutdownFromRenderThread");
 }
 
 void AndroidVulkanContext::Shutdown() {
 	ILOG("Calling NativeShutdownGraphics");
 	g_Vulkan->DestroyDevice();
-	g_Vulkan->DestroyDebugUtilsCallback();
-	g_Vulkan->DestroyDebugMsgCallback();
-
 	g_Vulkan->DestroyInstance();
 	// We keep the g_Vulkan context around to avoid invalidating a ton of pointers around the app.
 	finalize_glslang();
@@ -190,11 +152,13 @@ void AndroidVulkanContext::Resize() {
 	ILOG("AndroidVulkanContext::Resize begin (oldsize: %dx%d)", g_Vulkan->GetBackbufferWidth(), g_Vulkan->GetBackbufferHeight());
 
 	draw_->HandleEvent(Draw::Event::LOST_BACKBUFFER, g_Vulkan->GetBackbufferWidth(), g_Vulkan->GetBackbufferHeight());
-	g_Vulkan->DestroyObjects();
+	g_Vulkan->DestroySwapchain();
+	g_Vulkan->DestroySurface();
 
 	g_Vulkan->UpdateFlags(FlagsFromConfig());
+
 	g_Vulkan->ReinitSurface();
-	g_Vulkan->InitObjects();
+	g_Vulkan->InitSwapchain();
 	draw_->HandleEvent(Draw::Event::GOT_BACKBUFFER, g_Vulkan->GetBackbufferWidth(), g_Vulkan->GetBackbufferHeight());
 	ILOG("AndroidVulkanContext::Resize end (final size: %dx%d)", g_Vulkan->GetBackbufferWidth(), g_Vulkan->GetBackbufferHeight());
 }

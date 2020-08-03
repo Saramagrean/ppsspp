@@ -400,6 +400,7 @@
     <ClInclude Include="..\..\Core\Debugger\WebSocket\GPURecordSubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\HLESubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\LogBroadcaster.h" />
+    <ClInclude Include="..\..\Core\Debugger\WebSocket\MemorySubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\SteppingBroadcaster.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\SteppingSubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\WebSocketUtils.h" />
@@ -432,6 +433,7 @@
     <ClInclude Include="..\..\Core\FileSystems\VirtualDiscFileSystem.h" />
     <ClInclude Include="..\..\Core\Font\PGF.h" />
     <ClInclude Include="..\..\Core\HDRemaster.h" />
+    <ClInclude Include="..\..\Core\Instance.h" />
     <ClInclude Include="..\..\Core\HLE\FunctionWrappers.h" />
     <ClInclude Include="..\..\Core\HLE\HLE.h" />
     <ClInclude Include="..\..\Core\HLE\HLEHelperThread.h" />
@@ -519,6 +521,7 @@
     <ClInclude Include="..\..\Core\HW\SimpleAudioDec.h" />
     <ClInclude Include="..\..\Core\HW\StereoResampler.h" />
     <ClInclude Include="..\..\Core\Loaders.h" />
+    <ClInclude Include="..\..\Core\MemFault.h" />
     <ClInclude Include="..\..\Core\MemMap.h" />
     <ClInclude Include="..\..\Core\MemMapHelpers.h" />
     <ClInclude Include="..\..\Core\MIPS\ARM64\Arm64Jit.h" />
@@ -563,6 +566,7 @@
     <ClInclude Include="..\..\Core\System.h" />
     <ClInclude Include="..\..\Core\TextureReplacer.h" />
     <ClInclude Include="..\..\Core\ThreadEventQueue.h" />
+    <ClInclude Include="..\..\Core\Util\PortManager.h" />
     <ClInclude Include="..\..\Core\WebServer.h" />
     <ClInclude Include="..\..\Core\Util\AudioFormat.h" />
     <ClInclude Include="..\..\Core\Util\AudioFormatNEON.h" />
@@ -615,6 +619,7 @@
     <ClCompile Include="..\..\Core\Debugger\WebSocket\GPURecordSubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\HLESubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\LogBroadcaster.cpp" />
+    <ClCompile Include="..\..\Core\Debugger\WebSocket\MemorySubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\SteppingBroadcaster.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\SteppingSubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\WebSocketUtils.cpp" />
@@ -647,6 +652,7 @@
     <ClCompile Include="..\..\Core\FileSystems\VirtualDiscFileSystem.cpp" />
     <ClCompile Include="..\..\Core\Font\PGF.cpp" />
     <ClCompile Include="..\..\Core\HDRemaster.cpp" />
+    <ClCompile Include="..\..\Core\Instance.cpp" />
     <ClCompile Include="..\..\Core\HLE\HLE.cpp" />
     <ClCompile Include="..\..\Core\HLE\HLEHelperThread.cpp" />
     <ClCompile Include="..\..\Core\HLE\HLETables.cpp" />
@@ -730,6 +736,7 @@
     <ClCompile Include="..\..\Core\HW\SimpleAudioDec.cpp" />
     <ClCompile Include="..\..\Core\HW\StereoResampler.cpp" />
     <ClCompile Include="..\..\Core\Loaders.cpp" />
+    <ClCompile Include="..\..\Core\MemFault.cpp" />
     <ClCompile Include="..\..\Core\MemMap.cpp" />
     <ClCompile Include="..\..\Core\MemMapFunctions.cpp" />
     <ClCompile Include="..\..\Core\MIPS\ARM64\Arm64Asm.cpp" />
@@ -800,6 +807,7 @@
     <ClCompile Include="..\..\Core\Screenshot.cpp" />
     <ClCompile Include="..\..\Core\System.cpp" />
     <ClCompile Include="..\..\Core\TextureReplacer.cpp" />
+    <ClCompile Include="..\..\Core\Util\PortManager.cpp" />
     <ClCompile Include="..\..\Core\WebServer.cpp" />
     <ClCompile Include="..\..\Core\Util\AudioFormat.cpp" />
     <ClCompile Include="..\..\Core\Util\AudioFormatNEON.cpp" />
@@ -942,6 +950,9 @@
   <ItemGroup>
     <ProjectReference Include="..\CommonUWP\CommonUWP.vcxproj">
       <Project>{acb316ca-3ecb-48e5-be0a-91e72d5b0f12}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\miniupnpc_UWP\miniupnpc_UWP.vcxproj">
+      <Project>{d31fd4f0-53eb-477c-9dc7-149796f628e2}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
