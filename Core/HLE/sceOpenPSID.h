@@ -17,7 +17,17 @@
 
 #pragma once
 
-void __sceOpenPSIDInit();
+#define 	SCE_DNAS_USER_DATA_MAX_LEN   2048
+
+void __OpenPSIDInit();
+void __OpenPSIDShutdown();
 
 void Register_sceOpenPSID();
 void Register_sceOpenPSID_driver();
+void Register_sceDdrdb_driver();
+void Register_scePcact_driver();
+void Register_sceMlnpsnl_driver();
+void Register_sceDdrdb();
+
+static int sceOpenPSIDGetOpenPSID(u32 OpenPSIDPtr);
+static int sceOpenPSIDGetPSID(u32 OpenPSIDPtr, u32 unknown);
