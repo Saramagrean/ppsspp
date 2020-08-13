@@ -19,13 +19,12 @@
 
 #include "ppsspp_config.h"
 
-#include <vector>
+#include <fstream>
 #include <mutex>
+#include <vector>
 
 #include "file/ini_file.h"
-#include "Log.h"
-#include "StringUtils.h"
-#include "FileUtil.h"
+#include "Common/Log.h"
 
 #define	MAX_MESSAGES 8000   
 
@@ -181,6 +180,6 @@ public:
 
 	void ChangeFileLog(const char *filename);
 
-	void SaveConfig(IniFile::Section *section);
-	void LoadConfig(IniFile::Section *section, bool debugDefaults);
+	void SaveConfig(Section *section);
+	void LoadConfig(Section *section, bool debugDefaults);
 };

@@ -23,6 +23,7 @@
 #include <map>
 #include "gfx/d3d9_shader.h"
 #include "base/logging.h"
+#include "base/stringutil.h"
 #include "i18n/i18n.h"
 #include "math/lin/matrix4x4.h"
 #include "math/math_util.h"
@@ -40,7 +41,7 @@
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Directx9/ShaderManagerDX9.h"
 #include "GPU/Directx9/DrawEngineDX9.h"
-#include "GPU/Directx9/FramebufferDX9.h"
+#include "GPU/Directx9/FramebufferManagerDX9.h"
 
 using namespace Lin;
 

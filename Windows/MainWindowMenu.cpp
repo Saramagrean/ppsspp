@@ -1,16 +1,19 @@
 #include <map>
 #include <string>
+#include <sstream>
 
 #include "CommonWindows.h"
 #include <shellapi.h>
 
 #include "resource.h"
 
+#include "base/stringutil.h"
 #include "i18n/i18n.h"
 #include "util/text/utf8.h"
 #include "base/NativeApp.h"
 
 #include "gfx_es2/gpu_features.h"
+#include "Common/FileUtil.h"
 #include "Common/Log.h"
 #include "Common/LogManager.h"
 #include "Common/ConsoleListener.h"
@@ -23,7 +26,7 @@
 #endif
 #include "UI/OnScreenDisplay.h"
 #include "GPU/Common/PostShader.h"
-#include "GPU/Common/FramebufferCommon.h"
+#include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/TextureCacheCommon.h"
 #include "GPU/Common/TextureScalerCommon.h"
 

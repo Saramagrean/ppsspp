@@ -36,7 +36,7 @@
 
 #include <set>
 
-#include "Common/ChunkFile.h"
+#include "Common/Serialize/Serializer.h"
 #include "Common/GraphicsContext.h"
 #include "base/NativeApp.h"
 #include "base/logging.h"
@@ -53,7 +53,7 @@
 #include "GPU/ge_constants.h"
 #include "GPU/GeDisasm.h"
 
-#include "GPU/Common/FramebufferCommon.h"
+#include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Debugger/Debugger.h"
 #include "GPU/D3D11/ShaderManagerD3D11.h"
 #include "GPU/D3D11/GPU_D3D11.h"
@@ -143,7 +143,6 @@ void GPU_D3D11::CheckGPUFeatures() {
 #endif
 
 	features |= GPU_SUPPORTS_OES_TEXTURE_NPOT;
-	features |= GPU_SUPPORTS_LARGE_VIEWPORTS;
 	if (draw_->GetDeviceCaps().dualSourceBlend)
 		features |= GPU_SUPPORTS_DUALSOURCE_BLEND;
 	if (draw_->GetDeviceCaps().depthClampSupported)

@@ -20,6 +20,7 @@
 #include <ctime>
 #include <functional>
 #include <set>
+#include <sstream>
 
 #include "base/display.h"
 #include "base/NativeApp.h"
@@ -43,7 +44,7 @@
 #include "Core/Loaders.h"
 #include "Core/HLE/sceUtility.h"
 #include "Core/Instance.h"
-#include "GPU/Common/FramebufferCommon.h"
+#include "GPU/Common/FramebufferManagerCommon.h"
 
 // TODO: Find a better place for this.
 http::Downloader g_DownloadManager;
@@ -202,7 +203,7 @@ struct ConfigSetting {
 		return type_ != TYPE_TERMINATOR;
 	}
 
-	bool Get(IniFile::Section *section) {
+	bool Get(Section *section) {
 		switch (type_) {
 		case TYPE_BOOL:
 			if (cb_.b) {
@@ -255,7 +256,7 @@ struct ConfigSetting {
 		}
 	}
 
-	void Set(IniFile::Section *section) {
+	void Set(Section *section) {
 		if (!save_)
 			return;
 
@@ -433,6 +434,7 @@ static ConfigSetting generalSettings[] = {
 	ConfigSetting("Language", &g_Config.sLanguageIni, &DefaultLangRegion),
 	ConfigSetting("ForceLagSync2", &g_Config.bForceLagSync, false, true, true),
 	ConfigSetting("DiscordPresence", &g_Config.bDiscordPresence, true, true, false),  // Or maybe it makes sense to have it per-game? Race conditions abound...
+	ConfigSetting("UISound", &g_Config.bUISound, false, true, false),
 
 	ReportedConfigSetting("NumWorkerThreads", &g_Config.iNumWorkerThreads, &DefaultNumWorkers, true, true),
 	ConfigSetting("AutoLoadSaveState", &g_Config.iAutoLoadSaveState, 0, true, true),
@@ -450,19 +452,19 @@ static ConfigSetting generalSettings[] = {
 	ConfigSetting("EnableStateUndo", &g_Config.bEnableStateUndo, &DefaultEnableStateUndo, true, true),
 	ConfigSetting("RewindFlipFrequency", &g_Config.iRewindFlipFrequency, 0, true, true),
 
-	ConfigSetting("ShowRegionOnGameIcon", &g_Config.bShowRegionOnGameIcon, false, true, true),
-	ConfigSetting("ShowIDOnGameIcon", &g_Config.bShowIDOnGameIcon, false, true, true),
-	ConfigSetting("GameGridScale", &g_Config.fGameGridScale, 1.0, true, true),
+	ConfigSetting("ShowRegionOnGameIcon", &g_Config.bShowRegionOnGameIcon, false),
+	ConfigSetting("ShowIDOnGameIcon", &g_Config.bShowIDOnGameIcon, false),
+	ConfigSetting("GameGridScale", &g_Config.fGameGridScale, 1.0),
 	ConfigSetting("GridView1", &g_Config.bGridView1, true),
 	ConfigSetting("GridView2", &g_Config.bGridView2, true),
 	ConfigSetting("GridView3", &g_Config.bGridView3, false),
 	ConfigSetting("ComboMode", &g_Config.iComboMode, 0),
-	ConfigSetting("RightAnalogUp", &g_Config.iRightAnalogUp, 0),
-	ConfigSetting("RightAnalogDown", &g_Config.iRightAnalogDown, 0),
-	ConfigSetting("RightAnalogLeft", &g_Config.iRightAnalogLeft, 0),
-	ConfigSetting("RightAnalogRight", &g_Config.iRightAnalogRight, 0),
-	ConfigSetting("RightAnalogPress", &g_Config.iRightAnalogPress, 0),
-	ConfigSetting("RightAnalogCustom", &g_Config.bRightAnalogCustom, false),
+	ConfigSetting("RightAnalogUp", &g_Config.iRightAnalogUp, 0, true, true),
+	ConfigSetting("RightAnalogDown", &g_Config.iRightAnalogDown, 0, true, true),
+	ConfigSetting("RightAnalogLeft", &g_Config.iRightAnalogLeft, 0, true, true),
+	ConfigSetting("RightAnalogRight", &g_Config.iRightAnalogRight, 0, true, true),
+	ConfigSetting("RightAnalogPress", &g_Config.iRightAnalogPress, 0, true, true),
+	ConfigSetting("RightAnalogCustom", &g_Config.bRightAnalogCustom, false, true, true),
 
 	// "default" means let emulator decide, "" means disable.
 	ConfigSetting("ReportingHost", &g_Config.sReportHost, "default"),
@@ -1106,9 +1108,9 @@ static ConfigSectionSettings sections[] = {
 	{"Theme", themeSettings},
 };
 
-static void IterateSettings(IniFile &iniFile, std::function<void(IniFile::Section *section, ConfigSetting *setting)> func) {
+static void IterateSettings(IniFile &iniFile, std::function<void(Section *section, ConfigSetting *setting)> func) {
 	for (size_t i = 0; i < ARRAY_SIZE(sections); ++i) {
-		IniFile::Section *section = iniFile.GetOrCreateSection(sections[i].section);
+		Section *section = iniFile.GetOrCreateSection(sections[i].section);
 		for (auto setting = sections[i].settings; setting->HasMore(); ++setting) {
 			func(section, setting);
 		}
@@ -1145,8 +1147,8 @@ std::map<std::string, std::pair<std::string, int>> GetLangValuesMapping() {
 	langCodeMapping["CHINESE_TRADITIONAL"] = PSP_SYSTEMPARAM_LANGUAGE_CHINESE_TRADITIONAL;
 	langCodeMapping["CHINESE_SIMPLIFIED"] = PSP_SYSTEMPARAM_LANGUAGE_CHINESE_SIMPLIFIED;
 
-	IniFile::Section *langRegionNames = mapping.GetOrCreateSection("LangRegionNames");
-	IniFile::Section *systemLanguage = mapping.GetOrCreateSection("SystemLanguage");
+	Section *langRegionNames = mapping.GetOrCreateSection("LangRegionNames");
+	Section *systemLanguage = mapping.GetOrCreateSection("SystemLanguage");
 
 	for (size_t i = 0; i < keys.size(); i++) {
 		std::string langName;
@@ -1185,7 +1187,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 		// Continue anyway to initialize the config.
 	}
 
-	IterateSettings(iniFile, [](IniFile::Section *section, ConfigSetting *setting) {
+	IterateSettings(iniFile, [](Section *section, ConfigSetting *setting) {
 		setting->Get(section);
 	});
 
@@ -1193,7 +1195,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	if (!File::Exists(currentDirectory))
 		currentDirectory = "";
 
-	IniFile::Section *log = iniFile.GetOrCreateSection(logSectionName);
+	Section *log = iniFile.GetOrCreateSection(logSectionName);
 
 	bool debugDefaults = false;
 #ifdef _DEBUG
@@ -1201,7 +1203,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 #endif
 	LogManager::GetInstance()->LoadConfig(log, debugDefaults);
 
-	IniFile::Section *recent = iniFile.GetOrCreateSection("Recent");
+	Section *recent = iniFile.GetOrCreateSection("Recent");
 	recent->Get("MaxRecent", &iMaxRecent, 30);
 
 	// Fix issue from switching from uint (hex in .ini) to int (dec)
@@ -1247,7 +1249,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	}
 
 	// Check for an old dpad setting
-	IniFile::Section *control = iniFile.GetOrCreateSection("Control");
+	Section *control = iniFile.GetOrCreateSection("Control");
 	float f;
 	control->Get("DPadRadius", &f, 0.0f);
 	if (f > 0.0f) {
@@ -1336,13 +1338,13 @@ void Config::Save(const char *saveReason) {
 		// Need to do this somewhere...
 		bFirstRun = false;
 
-		IterateSettings(iniFile, [&](IniFile::Section *section, ConfigSetting *setting) {
+		IterateSettings(iniFile, [&](Section *section, ConfigSetting *setting) {
 			if (!bGameSpecific || !setting->perGame_) {
 				setting->Set(section);
 			}
 		});
 
-		IniFile::Section *recent = iniFile.GetOrCreateSection("Recent");
+		Section *recent = iniFile.GetOrCreateSection("Recent");
 		recent->Set("MaxRecent", iMaxRecent);
 
 		for (int i = 0; i < iMaxRecent; i++) {
@@ -1355,7 +1357,7 @@ void Config::Save(const char *saveReason) {
 			}
 		}
 
-		IniFile::Section *pinnedPaths = iniFile.GetOrCreateSection("PinnedPaths");
+		Section *pinnedPaths = iniFile.GetOrCreateSection("PinnedPaths");
 		pinnedPaths->Clear();
 		for (size_t i = 0; i < vPinnedPaths.size(); ++i) {
 			char keyName[64];
@@ -1364,17 +1366,17 @@ void Config::Save(const char *saveReason) {
 		}
 
 		if (!bGameSpecific) {
-			IniFile::Section *postShaderSetting = iniFile.GetOrCreateSection("PostShaderSetting");
+			Section *postShaderSetting = iniFile.GetOrCreateSection("PostShaderSetting");
 			postShaderSetting->Clear();
 			for (auto it = mPostShaderSetting.begin(), end = mPostShaderSetting.end(); it != end; ++it) {
 				postShaderSetting->Set(it->first.c_str(), it->second);
 			}
 		}
 
-		IniFile::Section *control = iniFile.GetOrCreateSection("Control");
+		Section *control = iniFile.GetOrCreateSection("Control");
 		control->Delete("DPadRadius");
 
-		IniFile::Section *log = iniFile.GetOrCreateSection(logSectionName);
+		Section *log = iniFile.GetOrCreateSection(logSectionName);
 		if (LogManager::GetInstance())
 			LogManager::GetInstance()->SaveConfig(log);
 
@@ -1612,16 +1614,16 @@ bool Config::saveGameConfig(const std::string &pGameId, const std::string &title
 
 	IniFile iniFile;
 
-	IniFile::Section *top = iniFile.GetOrCreateSection("");
+	Section *top = iniFile.GetOrCreateSection("");
 	top->AddComment(StringFromFormat("Game config for %s - %s", pGameId.c_str(), title.c_str()));
 
-	IterateSettings(iniFile, [](IniFile::Section *section, ConfigSetting *setting) {
+	IterateSettings(iniFile, [](Section *section, ConfigSetting *setting) {
 		if (setting->perGame_) {
 			setting->Set(section);
 		}
 	});
 
-	IniFile::Section *postShaderSetting = iniFile.GetOrCreateSection("PostShaderSetting");
+	Section *postShaderSetting = iniFile.GetOrCreateSection("PostShaderSetting");
 	postShaderSetting->Clear();
 	for (auto it = mPostShaderSetting.begin(), end = mPostShaderSetting.end(); it != end; ++it) {
 		postShaderSetting->Set(it->first.c_str(), it->second);
@@ -1651,7 +1653,7 @@ bool Config::loadGameConfig(const std::string &pGameId, const std::string &title
 		mPostShaderSetting[it.first] = std::stof(it.second);
 	}
 
-	IterateSettings(iniFile, [](IniFile::Section *section, ConfigSetting *setting) {
+	IterateSettings(iniFile, [](Section *section, ConfigSetting *setting) {
 		if (setting->perGame_) {
 			setting->Get(section);
 		}
@@ -1669,7 +1671,7 @@ void Config::unloadGameConfig() {
 		iniFile.Load(iniFilename_);
 
 		// Reload game specific settings back to standard.
-		IterateSettings(iniFile, [](IniFile::Section *section, ConfigSetting *setting) {
+		IterateSettings(iniFile, [](Section *section, ConfigSetting *setting) {
 			if (setting->perGame_) {
 				setting->Get(section);
 			}

@@ -28,7 +28,9 @@
 #include "Core/Core.h"
 #include "Core/Host.h"
 #include "Core/MemMapHelpers.h"
-#include "Common/ChunkFile.h"
+#include "Common/Serialize/Serializer.h"
+#include "Common/Serialize/SerializeFuncs.h"
+#include "Common/Serialize/SerializeMap.h"
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/Util/PortManager.h"
 
@@ -119,34 +121,34 @@ void __NetAdhocDoState(PointerWrap &p) {
 	auto cur_netAdhocctlInited = netAdhocctlInited;
 	auto cur_netAdhocMatchingInited = netAdhocMatchingInited;
 
-	p.Do(netAdhocInited);
-	p.Do(netAdhocctlInited);
-	p.Do(netAdhocMatchingInited);
-	p.Do(adhocctlHandlers);
+	Do(p, netAdhocInited);
+	Do(p, netAdhocctlInited);
+	Do(p, netAdhocMatchingInited);
+	Do(p, adhocctlHandlers);
 
 	if (s >= 2) {
-		p.Do(actionAfterMatchingMipsCall);
+		Do(p, actionAfterMatchingMipsCall);
 		__KernelRestoreActionType(actionAfterMatchingMipsCall, AfterMatchingMipsCall::Create);
 
-		p.Do(dummyThreadHackAddr);
+		Do(p, dummyThreadHackAddr);
 	}
 	else {
 		actionAfterMatchingMipsCall = -1;
 		dummyThreadHackAddr = 0;
 	}
 	if (s >= 3) {
-		p.Do(actionAfterAdhocMipsCall);
+		Do(p, actionAfterAdhocMipsCall);
 		__KernelRestoreActionType(actionAfterAdhocMipsCall, AfterAdhocMipsCall::Create);
 
-		p.Do(matchingThreadHackAddr);
+		Do(p, matchingThreadHackAddr);
 	}
 	else {
 		actionAfterAdhocMipsCall = -1;
 		matchingThreadHackAddr = 0;
 	}
 	if (s >= 4) {
-		p.Do(threadAdhocID);
-		p.Do(matchingThreads);
+		Do(p, threadAdhocID);
+		Do(p, matchingThreads);
 	}
 	else {
 		threadAdhocID = 0;
@@ -272,23 +274,24 @@ static u32 sceNetAdhocctlInit(int stackSize, int prio, u32 productAddr) {
 	return 0;
 }
 
+int NetAdhocctl_GetState() {
+	return threadStatus;
+}
+
 static int sceNetAdhocctlGetState(u32 ptrToStatus) {
-	// Library initialized
-	if (netAdhocctlInited) {
-		// Valid Arguments
-		if (Memory::IsValidAddress(ptrToStatus)) {
-			// Return Thread Status
-			Memory::Write_U32(threadStatus, ptrToStatus);
-			// Return Success
-			return 0;
-		}
-		
-		// Invalid Arguments
-		return ERROR_NET_ADHOCCTL_INVALID_ARG;
-	}
-	
 	// Library uninitialized
-	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
+	if (!netAdhocctlInited)
+		return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
+
+	// Invalid Arguments
+	if (!Memory::IsValidAddress(ptrToStatus))
+		return ERROR_NET_ADHOCCTL_INVALID_ARG;
+
+	// Return Thread Status
+	Memory::Write_U32(NetAdhocctl_GetState(), ptrToStatus);
+	// Return Success
+	return hleLogSuccessVerboseI(SCENET, 0);
+
 }
 
 /**
@@ -1429,34 +1432,6 @@ static int sceNetAdhocctlGetNameByAddr(const char *mac, u32 nameAddr) {
 	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
 }
 
-static int sceNetAdhocctlJoin(u32 scanInfoAddr) {
-	WARN_LOG(SCENET, "UNTESTED sceNetAdhocctlJoin(%08x) at %08x", scanInfoAddr, currentMIPS->pc);
-	if (!g_Config.bEnableWlan) {
-		return -1;
-	}
-	
-	// Library initialized
-	if (netAdhocctlInited)
-	{
-		// Valid Argument
-		if (Memory::IsValidAddress(scanInfoAddr))
-		{
-			SceNetAdhocctlScanInfoEmu * sinfo = (SceNetAdhocctlScanInfoEmu *)Memory::GetPointer(scanInfoAddr);
-			//while (true) sleep_ms(1);
-
-			// We can ignore minor connection process differences here
-			// TODO: Adhoc Server may need to be changed to differentiate between Host/Create and Join, otherwise it can't support multiple Host using the same Group name, thus causing one of the Host to be confused being treated as Join.
-			return sceNetAdhocctlCreate((const char*)&sinfo->group_name);
-		}
-
-		// Invalid Argument
-		return ERROR_NET_ADHOCCTL_INVALID_ARG;
-	}
-
-	// Uninitialized Library
-	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
-}
-
 int sceNetAdhocctlGetPeerInfo(const char *mac, int size, u32 peerInfoAddr) {
 	VERBOSE_LOG(SCENET, "sceNetAdhocctlGetPeerInfo(%s, %i, %08x) at %08x", mac2str((SceNetEtherAddr*)mac).c_str(), size, peerInfoAddr, currentMIPS->pc);
 	if (!g_Config.bEnableWlan) {
@@ -1526,20 +1501,8 @@ int sceNetAdhocctlGetPeerInfo(const char *mac, int size, u32 peerInfoAddr) {
 	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
 }
 
-/**
- * Create and / or Join a Virtual Network of the specified Name
- * @param group_name Virtual Network Name
- * @return 0 on success or... ADHOCCTL_NOT_INITIALIZED, ADHOCCTL_INVALID_ARG, ADHOCCTL_BUSY
- */
-int sceNetAdhocctlCreate(const char *groupName) {
-	char grpName[9] = { 0 };
-	memcpy(grpName, groupName, ADHOCCTL_GROUPNAME_LEN); // Copied to null-terminated var to prevent unexpected behaviour on Logs
-	INFO_LOG(SCENET, "sceNetAdhocctlCreate(%s) at %08x", grpName, currentMIPS->pc);
-	if (!g_Config.bEnableWlan) {
-		return -1;
-	}
-
-	const SceNetAdhocctlGroupName * groupNameStruct = (const SceNetAdhocctlGroupName *)groupName;
+int NetAdhocctl_Create(const char* groupName) {
+	const SceNetAdhocctlGroupName* groupNameStruct = (const SceNetAdhocctlGroupName*)groupName;
 	// Library initialized
 	if (netAdhocctlInited) {
 		// Valid Argument
@@ -1576,7 +1539,7 @@ int sceNetAdhocctlCreate(const char *groupName) {
 				// Acquire Network Lock
 
 				// Send Packet
-				int iResult = send(metasocket, (const char *)&packet, sizeof(packet), 0);
+				int iResult = send(metasocket, (const char*)&packet, sizeof(packet), 0);
 				if (iResult == SOCKET_ERROR) {
 					ERROR_LOG(SCENET, "Socket error (%i) when sending", errno);
 					//return ERROR_NET_ADHOCCTL_NOT_INITIALIZED; // ERROR_NET_ADHOCCTL_DISCONNECTED; // ERROR_NET_ADHOCCTL_BUSY;
@@ -1612,16 +1575,32 @@ int sceNetAdhocctlCreate(const char *groupName) {
 				// Return Success
 				return 0;
 			}
-			
+
 			// Connected State
 			return ERROR_NET_ADHOCCTL_BUSY; // ERROR_NET_ADHOCCTL_BUSY may trigger the game (ie. Ford Street Racing) to call sceNetAdhocctlDisconnect
 		}
-		
+
 		// Invalid Argument
 		return ERROR_NET_ADHOC_INVALID_ARG;
 	}
 	// Library uninitialized
 	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
+}
+
+/**
+ * Create and / or Join a Virtual Network of the specified Name
+ * @param group_name Virtual Network Name
+ * @return 0 on success or... ADHOCCTL_NOT_INITIALIZED, ADHOCCTL_INVALID_ARG, ADHOCCTL_BUSY
+ */
+int sceNetAdhocctlCreate(const char *groupName) {
+	char grpName[9] = { 0 };
+	memcpy(grpName, groupName, ADHOCCTL_GROUPNAME_LEN); // Copied to null-terminated var to prevent unexpected behaviour on Logs
+	INFO_LOG(SCENET, "sceNetAdhocctlCreate(%s) at %08x", grpName, currentMIPS->pc);
+	if (!g_Config.bEnableWlan) {
+		return -1;
+	}
+
+	return NetAdhocctl_Create(groupName);
 }
 
 static int sceNetAdhocctlConnect(u32 ptrToGroupName) {
@@ -1631,10 +1610,38 @@ static int sceNetAdhocctlConnect(u32 ptrToGroupName) {
 		memcpy(grpName, groupName, ADHOCCTL_GROUPNAME_LEN); // Copied to null-terminated var to prevent unexpected behaviour on Logs
 
 		INFO_LOG(SCENET, "sceNetAdhocctlConnect(groupName=%s) at %08x", grpName, currentMIPS->pc);
-		return sceNetAdhocctlCreate(groupName);
+		return NetAdhocctl_Create(groupName);
 	} 
 		
 	return ERROR_NET_ADHOC_INVALID_ARG; // ERROR_NET_ADHOC_INVALID_ADDR;
+}
+
+static int sceNetAdhocctlJoin(u32 scanInfoAddr) {
+	WARN_LOG(SCENET, "UNTESTED sceNetAdhocctlJoin(%08x) at %08x", scanInfoAddr, currentMIPS->pc);
+	if (!g_Config.bEnableWlan) {
+		return -1;
+	}
+
+	// Library initialized
+	if (netAdhocctlInited)
+	{
+		// Valid Argument
+		if (Memory::IsValidAddress(scanInfoAddr))
+		{
+			SceNetAdhocctlScanInfoEmu* sinfo = (SceNetAdhocctlScanInfoEmu*)Memory::GetPointer(scanInfoAddr);
+			//while (true) sleep_ms(1);
+
+			// We can ignore minor connection process differences here
+			// TODO: Adhoc Server may need to be changed to differentiate between Host/Create and Join, otherwise it can't support multiple Host using the same Group name, thus causing one of the Host to be confused being treated as Join.
+			return NetAdhocctl_Create((const char*)&sinfo->group_name);
+		}
+
+		// Invalid Argument
+		return ERROR_NET_ADHOCCTL_INVALID_ARG;
+	}
+
+	// Uninitialized Library
+	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
 }
 
 // Connect to the Adhoc control game mode (as a Host)

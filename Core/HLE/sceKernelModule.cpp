@@ -22,7 +22,9 @@
 #include "zlib.h"
 
 #include "base/stringutil.h"
-#include "Common/ChunkFile.h"
+#include "Common/Serialize/Serializer.h"
+#include "Common/Serialize/SerializeFuncs.h"
+#include "Common/Serialize/SerializeSet.h"
 #include "Common/FileUtil.h"
 #include "Common/StringUtils.h"
 #include "Core/Config.h"
@@ -152,7 +154,7 @@ void ImportVarSymbol(const VarSymbolImport &var);
 void ExportVarSymbol(const VarSymbolExport &var);
 void UnexportVarSymbol(const VarSymbolExport &var);
 
-void ImportFuncSymbol(const FuncSymbolImport &func, bool reimporting);
+void ImportFuncSymbol(const FuncSymbolImport &func, bool reimporting, const char *importingModule);
 void ExportFuncSymbol(const FuncSymbolExport &func);
 void UnexportFuncSymbol(const FuncSymbolExport &func);
 
@@ -265,14 +267,14 @@ public:
 		if (!s)
 			return;
 
-		p.Do(nm);
-		p.Do(memoryBlockAddr);
-		p.Do(memoryBlockSize);
-		p.Do(isFake);
+		Do(p, nm);
+		Do(p, memoryBlockAddr);
+		Do(p, memoryBlockSize);
+		Do(p, isFake);
 
 		if (s < 2) {
 			bool isStarted = false;
-			p.Do(isStarted);
+			Do(p, isStarted);
 			if (isStarted)
 				nm.status = MODULE_STATUS_STARTED;
 			else
@@ -280,24 +282,24 @@ public:
 		}
 
 		if (s >= 3) {
-			p.Do(textStart);
-			p.Do(textEnd);
+			Do(p, textStart);
+			Do(p, textEnd);
 		}
 		if (s >= 4) {
-			p.Do(libstub);
-			p.Do(libstubend);
+			Do(p, libstub);
+			Do(p, libstubend);
 		}
 
 		ModuleWaitingThread mwt = {0};
-		p.Do(waitingThreads, mwt);
+		Do(p, waitingThreads, mwt);
 		FuncSymbolExport fsx = {{0}};
-		p.Do(exportedFuncs, fsx);
+		Do(p, exportedFuncs, fsx);
 		FuncSymbolImport fsi = {{0}};
-		p.Do(importedFuncs, fsi);
+		Do(p, importedFuncs, fsi);
 		VarSymbolExport vsx = {{0}};
-		p.Do(exportedVars, vsx);
+		Do(p, exportedVars, vsx);
 		VarSymbolImport vsi = {{0}};
-		p.Do(importedVars, vsi);
+		Do(p, importedVars, vsi);
 
 		if (p.mode == p.MODE_READ) {
 			// On load state, we re-examine in case our syscall ids changed.
@@ -351,7 +353,7 @@ public:
 		// Keep track and actually hook it up if possible.
 		importedFuncs.push_back(func);
 		impExpModuleNames.insert(func.moduleName);
-		ImportFuncSymbol(func, reimporting);
+		ImportFuncSymbol(func, reimporting, GetName());
 	}
 
 	void ImportVar(const VarSymbolImport &var) {
@@ -437,8 +439,8 @@ public:
 		if (!s)
 			return;
 
-		p.Do(moduleID_);
-		p.Do(retValAddr);
+		Do(p, moduleID_);
+		Do(p, retValAddr);
 	}
 	static PSPAction *Create() {
 		return new AfterModuleEntryCall;
@@ -498,11 +500,11 @@ void __KernelModuleDoState(PointerWrap &p)
 	if (!s)
 		return;
 
-	p.Do(actionAfterModule);
+	Do(p, actionAfterModule);
 	__KernelRestoreActionType(actionAfterModule, AfterModuleEntryCall::Create);
 
 	if (s >= 2) {
-		p.Do(loadedModules);
+		Do(p, loadedModules);
 	}
 
 	if (p.mode == p.MODE_READ) {
@@ -711,7 +713,7 @@ void UnexportVarSymbol(const VarSymbolExport &var) {
 	}
 }
 
-void ImportFuncSymbol(const FuncSymbolImport &func, bool reimporting) {
+void ImportFuncSymbol(const FuncSymbolImport &func, bool reimporting, const char *importingModule) {
 	// Prioritize HLE implementations.
 	// TODO: Or not?
 	if (FuncImportIsSyscall(func.moduleName, func.nid)) {
@@ -748,9 +750,10 @@ void ImportFuncSymbol(const FuncSymbolImport &func, bool reimporting) {
 	// It hasn't been exported yet, but hopefully it will later.
 	bool isKnownModule = GetModuleIndex(func.moduleName) != -1;
 	if (isKnownModule) {
-		WARN_LOG_REPORT(LOADER, "Unknown syscall in known module '%s': 0x%08x", func.moduleName, func.nid);
+		// We used to report this, but I don't think it's very interesting anymore.
+		WARN_LOG(LOADER, "Unknown syscall from known module '%s': 0x%08x (import for '%s')", func.moduleName, func.nid, importingModule);
 	} else {
-		INFO_LOG(LOADER, "Function (%s,%08x) unresolved, storing for later resolving", func.moduleName, func.nid);
+		INFO_LOG(LOADER, "Function (%s,%08x) unresolved in '%s', storing for later resolving", func.moduleName, func.nid, importingModule);
 	}
 	if (isKnownModule || !reimporting) {
 		WriteFuncMissingStub(func.stubAddr, func.nid);
@@ -760,8 +763,8 @@ void ImportFuncSymbol(const FuncSymbolImport &func, bool reimporting) {
 
 void ExportFuncSymbol(const FuncSymbolExport &func) {
 	if (FuncImportIsSyscall(func.moduleName, func.nid)) {
-		// Oops, HLE covers this.
-		WARN_LOG_REPORT(LOADER, "Ignoring func export %s/%08x, already implemented in HLE.", func.moduleName, func.nid);
+		// HLE covers this already - let's ignore the function.
+		WARN_LOG(LOADER, "Ignoring func export %s/%08x, already implemented in HLE.", func.moduleName, func.nid);
 		return;
 	}
 

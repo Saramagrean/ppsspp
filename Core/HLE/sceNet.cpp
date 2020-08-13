@@ -25,7 +25,9 @@
 #include "net/resolve.h"
 #include "util/text/parsers.h"
 
-#include "Common/ChunkFile.h"
+#include "Common/Serialize/Serializer.h"
+#include "Common/Serialize/SerializeFuncs.h"
+#include "Common/Serialize/SerializeMap.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceKernelMemory.h"
@@ -42,6 +44,7 @@
 #include "Core/HLE/proAdhoc.h"
 #include "Core/HLE/sceNetAdhoc.h"
 #include "Core/HLE/sceNet.h"
+#include "Core/HLE/sceNp.h"
 #include "Core/Reporting.h"
 #include "Core/Instance.h"
 
@@ -58,7 +61,7 @@ static struct SceNetMallocStat netMallocStat;
 
 static std::map<int, ApctlHandler> apctlHandlers;
 
-static struct SceNetApctlInfoInternal netApctlInfo;
+SceNetApctlInfoInternal netApctlInfo;
 
 bool netApctlInited;
 u32 netApctlState;
@@ -72,6 +75,28 @@ std::deque<ApctlArgs> apctlEvents;
 u32 Net_Term();
 int NetApctl_Term();
 void NetApctl_InitInfo();
+
+void AfterApctlMipsCall::DoState(PointerWrap & p) {
+	auto s = p.Section("AfterApctlMipsCall", 1, 1);
+	if (!s)
+		return;
+	// Just in case there are "s" corruption in the future where s.ver is a negative number
+	if (s >= 1) {
+		Do(p, handlerID);
+		Do(p, oldState);
+		Do(p, newState);
+		Do(p, event);
+		Do(p, error);
+		Do(p, argsAddr);
+	} else {
+		handlerID = -1;
+		oldState = 0;
+		newState = 0;
+		event = 0;
+		error = 0;
+		argsAddr = 0;
+	}
+}
 
 void AfterApctlMipsCall::run(MipsCall& call) {
 	u32 v0 = currentMIPS->r[MIPS_REG_V0];
@@ -221,34 +246,34 @@ void __NetDoState(PointerWrap &p) {
 	auto cur_netInetInited = netInetInited;
 	auto cur_netApctlInited = netApctlInited;
 
-	p.Do(netInited);
-	p.Do(netInetInited);
-	p.Do(netApctlInited);
-	p.Do(apctlHandlers);
-	p.Do(netMallocStat);
+	Do(p, netInited);
+	Do(p, netInetInited);
+	Do(p, netApctlInited);
+	Do(p, apctlHandlers);
+	Do(p, netMallocStat);
 	if (s < 2) {
 		netDropRate = 0;
 		netDropDuration = 0;
 	} else {
-		p.Do(netDropRate);
-		p.Do(netDropDuration);
+		Do(p, netDropRate);
+		Do(p, netDropDuration);
 	}
 	if (s < 3) {
 		netPoolAddr = 0;
 		netThread1Addr = 0;
 		netThread2Addr = 0;
 	} else {
-		p.Do(netPoolAddr);
-		p.Do(netThread1Addr);
-		p.Do(netThread2Addr);
+		Do(p, netPoolAddr);
+		Do(p, netThread1Addr);
+		Do(p, netThread2Addr);
 	}
 	if (s >= 4) {
-		p.Do(netApctlState);
-		p.Do(netApctlInfo);
-		p.Do(actionAfterApctlMipsCall);
+		Do(p, netApctlState);
+		Do(p, netApctlInfo);
+		Do(p, actionAfterApctlMipsCall);
 		__KernelRestoreActionType(actionAfterApctlMipsCall, AfterApctlMipsCall::Create);
-		p.Do(apctlThreadHackAddr);
-		p.Do(apctlThreadID);
+		Do(p, apctlThreadHackAddr);
+		Do(p, apctlThreadID);
 	}
 	else {
 		actionAfterApctlMipsCall = -1;
@@ -382,7 +407,7 @@ void __NetApctlCallbacks()
 		apctlEvents.pop_front();
 
 		// Adjust delay according to current event. Added an extra delay to prevent I/O Timing method from causing disconnection
-		if (*event == PSP_NET_APCTL_EVENT_CONNECT_REQUEST) // || *event == PSP_NET_APCTL_EVENT_SCAN_REQUEST)
+		if (*event == PSP_NET_APCTL_EVENT_CONNECT_REQUEST || *event == PSP_NET_APCTL_EVENT_GET_IP || *event == PSP_NET_APCTL_EVENT_SCAN_REQUEST)
 			delayus = (adhocEventDelayMS + 2 * adhocExtraPollDelayMS) * 1000;
 		else
 			delayus = (adhocEventPollDelayMS + 2 * adhocExtraPollDelayMS) * 1000;
@@ -454,6 +479,27 @@ void __NetApctlCallbacks()
 			AfterApctlMipsCall* after = (AfterApctlMipsCall*)__KernelCreateAction(actionAfterApctlMipsCall);
 			after->SetData(it->first, *oldState, *newState, *event, *error, it->second.argument);
 			hleEnqueueCall(it->second.entryPoint, 5, args.data, after);
+		}
+	}
+
+	// We are temporarily borrowing APctl thread for NpAuth callbacks for testing to simulate authentication
+	if (!npAuthEvents.empty())
+	{
+		auto args = npAuthEvents.front();
+		auto id = &args.data[0];
+		auto result = &args.data[1];
+		auto argAddr = &args.data[2];
+		npAuthEvents.pop_front();
+
+		delayus = (adhocEventDelayMS + 2 * adhocExtraPollDelayMS) * 1000;
+
+		int handlerID = *id - 1;
+		for (std::map<int, NpAuthHandler>::iterator it = npAuthHandlers.begin(); it != npAuthHandlers.end(); ++it) {
+			if (it->first == handlerID) {
+				DEBUG_LOG(SCENET, "NpAuthCallback [HandlerID=%i][RequestID=%d][Result=%d][ArgsPtr=%08x]", it->first, *id, *result, it->second.argument);
+				// TODO: Update result / args.data[1] with the actual ticket length (or error code?)
+				hleEnqueueCall(it->second.entryPoint, 3, args.data);
+			}
 		}
 	}
 
@@ -748,6 +794,11 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 
 	// Set default value before connected to an AP
 	memset(&netApctlInfo, 0, sizeof(netApctlInfo)); // NetApctl_InitInfo();
+	std::string APname = "Wifi"; // fake AP/hotspot
+	truncate_cpy(netApctlInfo.name, sizeof(netApctlInfo.name), APname.c_str());
+	truncate_cpy(netApctlInfo.ssid, sizeof(netApctlInfo.ssid), APname.c_str());
+	memcpy(netApctlInfo.bssid, "\1\1\2\2\3\3", sizeof(netApctlInfo.bssid)); // fake AP's mac address
+	netApctlInfo.ssidLength = static_cast<unsigned int>(APname.length());
 	truncate_cpy(netApctlInfo.ip, sizeof(netApctlInfo.ip), "0.0.0.0");
 	truncate_cpy(netApctlInfo.gateway, sizeof(netApctlInfo.gateway), "0.0.0.0");
 	truncate_cpy(netApctlInfo.primaryDns, sizeof(netApctlInfo.primaryDns), "0.0.0.0");
@@ -871,9 +922,7 @@ static int sceNetApctlGetInfo(int code, u32 pInfoAddr) {
 	return hleLogSuccessI(SCENET, 0);
 }
 
-// TODO: How many handlers can the PSP actually have for Apctl?
-// TODO: Should we allow the same handler to be added more than once?
-static u32 sceNetApctlAddHandler(u32 handlerPtr, u32 handlerArg) {
+int NetApctl_AddHandler(u32 handlerPtr, u32 handlerArg) {
 	bool foundHandler = false;
 	u32 retval = 0;
 	struct ApctlHandler handler;
@@ -885,39 +934,51 @@ static u32 sceNetApctlAddHandler(u32 handlerPtr, u32 handlerArg) {
 	handler.entryPoint = handlerPtr;
 	handler.argument = handlerArg;
 
-	for(std::map<int, ApctlHandler>::iterator it = apctlHandlers.begin(); it != apctlHandlers.end(); it++) {
-		if(it->second.entryPoint == handlerPtr) {
+	for (std::map<int, ApctlHandler>::iterator it = apctlHandlers.begin(); it != apctlHandlers.end(); it++) {
+		if (it->second.entryPoint == handlerPtr) {
 			foundHandler = true;
 			break;
 		}
 	}
 
-	if(!foundHandler && Memory::IsValidAddress(handlerPtr)) {
-		if(apctlHandlers.size() >= MAX_APCTL_HANDLERS) {
-			ERROR_LOG(SCENET, "UNTESTED sceNetApctlAddHandler(%x, %x): Too many handlers", handlerPtr, handlerArg);
+	if (!foundHandler && Memory::IsValidAddress(handlerPtr)) {
+		if (apctlHandlers.size() >= MAX_APCTL_HANDLERS) {
+			ERROR_LOG(SCENET, "Failed to Add handler(%x, %x): Too many handlers", handlerPtr, handlerArg);
 			retval = ERROR_NET_ADHOCCTL_TOO_MANY_HANDLERS; // TODO: What's the proper error code for Apctl's TOO_MANY_HANDLERS?
 			return retval;
 		}
 		apctlHandlers[retval] = handler;
-		WARN_LOG(SCENET, "UNTESTED sceNetApctlAddHandler(%x, %x): added handler %d", handlerPtr, handlerArg, retval);
+		WARN_LOG(SCENET, "Added Apctl handler(%x, %x): %d", handlerPtr, handlerArg, retval);
 	}
 	else {
-		ERROR_LOG(SCENET, "UNTESTED sceNetApctlAddHandler(%x, %x): Same handler already exists", handlerPtr, handlerArg);
+		ERROR_LOG(SCENET, "Existing Apctl handler(%x, %x)", handlerPtr, handlerArg);
 	}
 
 	// The id to return is the number of handlers currently registered
 	return retval;
 }
 
-static int sceNetApctlDelHandler(u32 handlerID) {
-	if(apctlHandlers.find(handlerID) != apctlHandlers.end()) {
+// TODO: How many handlers can the PSP actually have for Apctl?
+// TODO: Should we allow the same handler to be added more than once?
+static u32 sceNetApctlAddHandler(u32 handlerPtr, u32 handlerArg) {
+	INFO_LOG(SCENET, "%s(%08x, %08x)", __FUNCTION__, handlerPtr, handlerArg);
+	return NetApctl_AddHandler(handlerPtr, handlerArg);
+}
+
+int NetApctl_DelHandler(u32 handlerID) {
+	if (apctlHandlers.find(handlerID) != apctlHandlers.end()) {
 		apctlHandlers.erase(handlerID);
-		WARN_LOG(SCENET, "UNTESTED sceNetapctlDelHandler(%d): deleted handler %d", handlerID, handlerID);
+		WARN_LOG(SCENET, "Deleted Apctl handler: %d", handlerID);
 	}
 	else {
-		ERROR_LOG(SCENET, "UNTESTED sceNetapctlDelHandler(%d): asked to delete invalid handler %d", handlerID, handlerID);
+		ERROR_LOG(SCENET, "Invalid Apctl handler: %d", handlerID);
 	}
 	return 0;
+}
+
+static int sceNetApctlDelHandler(u32 handlerID) {
+	INFO_LOG(SCENET, "%s(%d)", __FUNCTION__, handlerID);
+	return NetApctl_DelHandler(handlerID);
 }
 
 static int sceNetInetInetAton(const char *hostname, u32 addrPtr) {
@@ -1021,10 +1082,11 @@ static int sceNetInetConnect(int socket, u32 sockAddrInternetPtr, int addressLen
 	return -1;
 }
 
-static int sceNetApctlConnect(int connIndex) {
-	ERROR_LOG(SCENET, "UNIMPL %s(%i)", __FUNCTION__, connIndex);
+int sceNetApctlConnect(int connIndex) {
+	WARN_LOG(SCENET, "UNTESTED %s(%i)", __FUNCTION__, connIndex);
 	// Is this connIndex is the index to the scanning's result data or sceNetApctlGetBSSDescIDListUser result?
 	__UpdateApctlHandlers(0, 0, PSP_NET_APCTL_EVENT_CONNECT_REQUEST, 0);
+	//hleDelayResult(0, "give time to init/cleanup", adhocEventDelayMS * 1000);
 	return 0;
 }
 
@@ -1037,15 +1099,17 @@ static int sceNetApctlDisconnect() {
 	return 0;
 }
 
+int NetApctl_GetState() {
+	return netApctlState;
+}
+
 static int sceNetApctlGetState(u32 pStateAddr) {
-	WARN_LOG(SCENET, "UNTESTED %s(%08x)", __FUNCTION__, pStateAddr);
-	
 	//if (!netApctlInited) return hleLogError(SCENET, ERROR_NET_APCTL_NOT_IN_BSS, "apctl not in bss");
 
 	// Valid Arguments
 	if (Memory::IsValidAddress(pStateAddr)) {
 		// Return Thread Status
-		Memory::Write_U32(netApctlState, pStateAddr);
+		Memory::Write_U32(NetApctl_GetState(), pStateAddr);
 		// Return Success
 		return hleLogSuccessI(SCENET, 0);
 	}
@@ -1053,15 +1117,18 @@ static int sceNetApctlGetState(u32 pStateAddr) {
 	return hleLogError(SCENET, -1, "apctl invalid arg");
 }
 
-static int sceNetApctlScanUser() {
-	ERROR_LOG(SCENET, "UNIMPL %s()", __FUNCTION__);
-
+int NetApctl_ScanUser() {
 	// Scan probably only works when not in connected state, right?
 	if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED)
 		return hleLogError(SCENET, ERROR_NET_APCTL_NOT_DISCONNECTED, "apctl not disconnected");
 
 	__UpdateApctlHandlers(0, 0, PSP_NET_APCTL_EVENT_SCAN_REQUEST, 0);
 	return 0;
+}
+
+static int sceNetApctlScanUser() {
+	ERROR_LOG(SCENET, "UNIMPL %s()", __FUNCTION__);
+	return NetApctl_ScanUser();
 }
 
 static int sceNetApctlGetBSSDescIDListUser(u32 sizeAddr, u32 bufAddr) {
@@ -1137,13 +1204,7 @@ static int sceNetApctlGetBSSDescEntryUser(int entryId, int infoId, u32 resultAdd
 
 static int sceNetApctlScanSSID2() {
 	ERROR_LOG(SCENET, "UNIMPL %s()", __FUNCTION__);
-
-	// Scan probably only works when not in connected state, right?
-	if (netApctlState != PSP_NET_APCTL_STATE_DISCONNECTED)
-		return hleLogError(SCENET, ERROR_NET_APCTL_NOT_DISCONNECTED, "apctl not disconnected");
-
-	__UpdateApctlHandlers(0, 0, PSP_NET_APCTL_EVENT_SCAN_REQUEST, 0);
-	return 0;
+	return NetApctl_ScanUser();
 }
 
 static int sceNetApctlGetBSSDescIDList2(u32 Arg1, u32 Arg2, u32 Arg3, u32 Arg4) {
@@ -1163,13 +1224,13 @@ static int sceNetResolverInit()
 static int sceNetApctlAddInternalHandler(u32 handlerPtr, u32 handlerArg) {
 	ERROR_LOG(SCENET, "UNIMPL %s(%08x, %08x)", __FUNCTION__, handlerPtr, handlerArg);
 	// This seems to be a 2nd kind of handler
-	return sceNetApctlAddHandler(handlerPtr, handlerArg);
+	return NetApctl_AddHandler(handlerPtr, handlerArg);
 }
 
 static int sceNetApctlDelInternalHandler(u32 handlerID) {
 	ERROR_LOG(SCENET, "UNIMPL %s(%i)", __FUNCTION__, handlerID);
 	// This seems to be a 2nd kind of handler
-	return sceNetApctlDelHandler(handlerID);
+	return NetApctl_DelHandler(handlerID);
 }
 
 static int sceNetApctl_A7BB73DF(u32 handlerPtr, u32 handlerArg) {
@@ -1195,7 +1256,7 @@ static int sceNetApctl_lib2_4C19731F(int code, u32 pInfoAddr) {
 
 static int sceNetApctlScan() {
 	ERROR_LOG(SCENET, "UNIMPL %s()", __FUNCTION__);
-	return sceNetApctlScanUser();
+	return NetApctl_ScanUser();
 }
 
 static int sceNetApctlGetBSSDescIDList(u32 sizeAddr, u32 bufAddr) {
