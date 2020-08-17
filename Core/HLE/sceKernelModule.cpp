@@ -72,7 +72,7 @@ enum {
 	PSP_THREAD_ATTR_USER = 0x80000000,
 };
 
-enum {
+enum : u32 {
 	// Function exports.
 	NID_MODULE_START = 0xD632ACDB,
 	NID_MODULE_STOP = 0xCEE8593C,
@@ -1799,7 +1799,7 @@ void __KernelGPUReplay() {
 	// Special ABI: s0 and s1 are the "args".  Not null terminated.
 	const char *filenamep = Memory::GetCharPointer(currentMIPS->r[MIPS_REG_S1]);
 	if (!filenamep) {
-		ERROR_LOG(SYSTEM, "Failed to load dump filename");
+		ERROR_LOG(G3D, "Failed to load dump filename");
 		Core_Stop();
 		return;
 	}
