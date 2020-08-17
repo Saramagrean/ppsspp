@@ -468,7 +468,9 @@ void __NetApctlCallbacks()
 	}
 
 	// Must be delayed long enough whenever there is a pending callback.
-	hleDelayResult(0, "Prevent Apctl thread from blocking", delayus);
+	//hleDelayResult(0, "Prevent Apctl thread from blocking", delayus);
+	sceKernelDelayThread(delayus);
+	hleSkipDeadbeef();
 }
 
 static inline u32 AllocUser(u32 size, bool fromTop, const char *name) {
