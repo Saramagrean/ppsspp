@@ -48,6 +48,7 @@
 #include "Core/Host.h"
 #include "Core/System.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HLE/Plugins.h"
 #include "Core/HLE/ReplaceTables.h"
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelMemory.h"
@@ -244,6 +245,7 @@ bool CPU_Init() {
 	std::string discID = g_paramSFO.GetDiscID();
 	coreParameter.compat.Load(discID);
 
+	HLEPlugins::Init();
 	if (!Memory::Init()) {
 		// We're screwed.
 		return false;
@@ -309,6 +311,7 @@ void CPU_Shutdown() {
 	pspFileSystem.Shutdown();
 	mipsr4k.Shutdown();
 	Memory::Shutdown();
+	HLEPlugins::Shutdown();
 
 	delete loadedFile;
 	loadedFile = nullptr;
@@ -550,6 +553,8 @@ std::string GetSysDirectory(PSPDirectories directoryType) {
 		return g_Config.memStickDirectory + "PSP/SYSTEM/CACHE/";
 	case DIRECTORY_TEXTURES:
 		return g_Config.memStickDirectory + "PSP/TEXTURES/";
+	case DIRECTORY_PLUGINS:
+		return g_Config.memStickDirectory + "PSP/PLUGINS/";
 	case DIRECTORY_APP_CACHE:
 		if (!g_Config.appCacheDirectory.empty()) {
 			return g_Config.appCacheDirectory;
