@@ -481,16 +481,19 @@ public:
 		return renderManager_.GetCurrentStepId();
 	}
 
+	void InvalidateCachedState() override;
+
 private:
 	void ApplySamplers();
 
 	GLRenderManager renderManager_;
 
-	OpenGLSamplerState *boundSamplers_[MAX_TEXTURE_SLOTS]{};
-	OpenGLTexture *boundTextures_[MAX_TEXTURE_SLOTS]{};
 	DeviceCaps caps_{};
 
 	// Bound state
+	OpenGLSamplerState *boundSamplers_[MAX_TEXTURE_SLOTS]{};
+	OpenGLTexture *boundTextures_[MAX_TEXTURE_SLOTS]{};
+
 	OpenGLPipeline *curPipeline_ = nullptr;
 	OpenGLBuffer *curVBuffers_[4]{};
 	int curVBufferOffsets_[4]{};
@@ -614,6 +617,10 @@ void OpenGLContext::EndFrame() {
 	renderManager_.EndPushBuffer(frameData.push);  // upload the data!
 	renderManager_.Finish();
 
+	InvalidateCachedState();
+}
+
+void OpenGLContext::InvalidateCachedState() {
 	// Unbind stuff.
 	for (auto &texture : boundTextures_) {
 		texture = nullptr;
@@ -663,6 +670,9 @@ public:
 	void Bind(int stage) {
 		render_->BindTexture(stage, tex_);
 	}
+	int NumMipmaps() const {
+		return mipLevels_;
+	}
 
 private:
 	void SetImageData(int x, int y, int z, int width, int height, int depth, int level, int stride, const uint8_t *data, TextureCallback callback);
@@ -679,7 +689,6 @@ private:
 
 OpenGLTexture::OpenGLTexture(GLRenderManager *render, const TextureDesc &desc) : render_(render) {
 	generatedMips_ = false;
-	canWrap_ = true;
 	width_ = desc.width;
 	height_ = desc.height;
 	depth_ = desc.depth;
@@ -1022,7 +1031,9 @@ void OpenGLContext::ApplySamplers() {
 	for (int i = 0; i < MAX_TEXTURE_SLOTS; i++) {
 		const OpenGLSamplerState *samp = boundSamplers_[i];
 		const OpenGLTexture *tex = boundTextures_[i];
-		if (!samp || !tex) {
+		if (tex) {
+			_assert_(samp);
+		} else {
 			continue;
 		}
 		GLenum wrapS;
@@ -1037,6 +1048,7 @@ void OpenGLContext::ApplySamplers() {
 		GLenum magFilt = samp->magFilt;
 		GLenum minFilt = tex->HasMips() ? samp->mipMinFilt : samp->minFilt;
 		renderManager_.SetTextureSampler(i, wrapS, wrapT, magFilt, minFilt, 0.0f);
+		renderManager_.SetTextureLod(i, 0.0, (float)(tex->NumMipmaps() - 1), 0.0);
 	}
 }
 
@@ -1093,12 +1105,13 @@ bool OpenGLPipeline::LinkShaders() {
 
 void OpenGLContext::BindPipeline(Pipeline *pipeline) {
 	curPipeline_ = (OpenGLPipeline *)pipeline;
-	if (curPipeline_) {
-		curPipeline_->blend->Apply(&renderManager_);
-		curPipeline_->depthStencil->Apply(&renderManager_, stencilRef_);
-		curPipeline_->raster->Apply(&renderManager_);
-		renderManager_.BindProgram(curPipeline_->program_);
+	if (!curPipeline_) {
+		return;
 	}
+	curPipeline_->blend->Apply(&renderManager_);
+	curPipeline_->depthStencil->Apply(&renderManager_, stencilRef_);
+	curPipeline_->raster->Apply(&renderManager_);
+	renderManager_.BindProgram(curPipeline_->program_);
 }
 
 void OpenGLContext::UpdateDynamicUniformBuffer(const void *ub, size_t size) {
