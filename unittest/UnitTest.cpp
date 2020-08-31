@@ -24,13 +24,16 @@
 // TODO: Make a test of nice unittest asserts and count successes etc.
 // Or just integrate with an existing testing framework.
 
-
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
 #include <string>
 #include <sstream>
+#if defined(ANDROID)
+#include <jni.h>
+#endif
 
+#include "ppsspp_config.h"
 #include "base/NativeApp.h"
 #include "input/input_state.h"
 #include "ext/disarm.h"
@@ -61,6 +64,16 @@ float System_GetPropertyFloat(SystemProperty prop) {
 bool System_GetPropertyBool(SystemProperty prop) {
 	return false;
 }
+
+#if defined(ANDROID)
+JNIEnv *getEnv() {
+	return nullptr;
+}
+
+jclass findClass(const char *name) {
+	return nullptr;
+}
+#endif
 
 #ifndef M_PI_2
 #define M_PI_2     1.57079632679489661923
@@ -547,13 +560,13 @@ bool TestArm64Emitter();
 bool TestX64Emitter();
 
 TestItem availableTests[] = {
-#if defined(ARM64) || defined(_M_X64) || defined(_M_IX86)
+#if PPSSPP_ARCH(ARM64) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(Arm64Emitter),
 #endif
-#if defined(ARM) || defined(_M_X64) || defined(_M_IX86)
+#if PPSSPP_ARCH(ARM) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(ArmEmitter),
 #endif
-#if defined(_M_X64) || defined(_M_IX86)
+#if PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(X64Emitter),
 #endif
 	TEST_ITEM(VertexJit),

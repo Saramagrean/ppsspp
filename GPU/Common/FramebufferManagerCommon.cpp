@@ -516,8 +516,10 @@ void FramebufferManagerCommon::NotifyRenderFramebufferSwitched(VirtualFramebuffe
 	textureCache_->ForgetLastTexture();
 	shaderManager_->DirtyLastShader();
 
-	// Copy depth pixel value from the read framebuffer to the draw framebuffer
 	if (prevVfb) {
+		// Copy depth value from the previously bound framebuffer to the current one.
+		// We check that the address is the same within BlitFramebufferDepth before actually blitting.
+
 		bool hasNewerDepth = prevVfb->last_frame_depth_render != 0 && prevVfb->last_frame_depth_render >= vfb->last_frame_depth_updated;
 		if (!prevVfb->fbo || !vfb->fbo || !useBufferedRendering_ || !hasNewerDepth || isClearingDepth) {
 			// If depth wasn't updated, then we're at least "two degrees" away from the data.
@@ -1068,11 +1070,11 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 	}
 
 	shaderManager_->DirtyLastShader();
-	char name[256];
-	snprintf(name, sizeof(name), "%08x_%08x", vfb->fb_address, vfb->z_address);
-	vfb->fbo = draw_->CreateFramebuffer({ vfb->renderWidth, vfb->renderHeight, 1, 1, true, (Draw::FBColorDepth)vfb->colorDepth, name });
+	char tag[256];
+	snprintf(tag, sizeof(tag), "%08x_%08x_%dx%d", vfb->fb_address, vfb->z_address, w, h);
+	vfb->fbo = draw_->CreateFramebuffer({ vfb->renderWidth, vfb->renderHeight, 1, 1, true, (Draw::FBColorDepth)vfb->colorDepth, tag });
 	if (old.fbo) {
-		INFO_LOG(FRAMEBUF, "Resizing FBO for %08x : %d x %d x %d", vfb->fb_address, w, h, vfb->format);
+		INFO_LOG(FRAMEBUF, "Resizing FBO for %08x : %dx%dx%s", vfb->fb_address, w, h, GeBufferFormatToString(vfb->format));
 		if (vfb->fbo) {
 			draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::CLEAR, Draw::RPAction::CLEAR, Draw::RPAction::CLEAR }, "ResizeFramebufFBO");
 			if (!skipCopy) {
@@ -1088,7 +1090,7 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 	}
 
 	if (!vfb->fbo) {
-		ERROR_LOG(FRAMEBUF, "Error creating FBO during resize! %d x %d", vfb->renderWidth, vfb->renderHeight);
+		ERROR_LOG(FRAMEBUF, "Error creating FBO during resize! %dx%d", vfb->renderWidth, vfb->renderHeight);
 		vfb->last_frame_failed = gpuStats.numFlips;
 	}
 }
@@ -1291,9 +1293,19 @@ void FramebufferManagerCommon::FindTransferFramebuffers(VirtualFramebuffer *&dst
 	}
 
 	if (!dstBuffer && PSP_CoreParameter().compat.flags().BlockTransferAllowCreateFB) {
-		GEBufferFormat ramFormat = bpp == 4 ? GE_FORMAT_8888 : GE_FORMAT_5551;
-		// TODO: We don't really know the 16-bit format here.. at all. Can only guess when it gets used later!
-		// But actually, the format of the source buffer is probably not a bad guess..
+		GEBufferFormat ramFormat;
+		// Try to guess the appropriate format. We only know the bpp from the block transfer command (16 or 32 bit).
+		if (bpp == 4) {
+			// Only one possibility unless it's doing split pixel tricks (which we could detect through stride maybe).
+			ramFormat = GE_FORMAT_8888;
+		} else if (srcBuffer->format != GE_FORMAT_8888) {
+			// We guess that the game will interpret the data the same as it was in the source of the copy.
+			// Seems like a likely good guess, and works in Test Drive Unlimited.
+			ramFormat = srcBuffer->format;
+		} else {
+			// No info left - just fall back to something. But this is definitely split pixel tricks.
+			ramFormat = GE_FORMAT_5551;
+		}
 		dstBuffer = CreateRAMFramebuffer(dstBasePtr, dstWidth, dstHeight, dstStride, ramFormat);
 	}
 
@@ -1758,8 +1770,8 @@ void FramebufferManagerCommon::DestroyAllFBOs() {
 	tempFBOs_.clear();
 }
 
-Draw::Framebuffer *FramebufferManagerCommon::GetTempFBO(TempFBO reason, u16 w, u16 h, Draw::FBColorDepth depth) {
-	u64 key = ((u64)reason << 48) | ((u64)depth << 32) | ((u32)w << 16) | h;
+Draw::Framebuffer *FramebufferManagerCommon::GetTempFBO(TempFBO reason, u16 w, u16 h, Draw::FBColorDepth color_depth) {
+	u64 key = ((u64)reason << 48) | ((u64)color_depth << 32) | ((u32)w << 16) | h;
 	auto it = tempFBOs_.find(key);
 	if (it != tempFBOs_.end()) {
 		it->second.last_frame_used = gpuStats.numFlips;
@@ -1768,10 +1780,12 @@ Draw::Framebuffer *FramebufferManagerCommon::GetTempFBO(TempFBO reason, u16 w, u
 
 	textureCache_->ForgetLastTexture();
 	bool z_stencil = reason == TempFBO::STENCIL;
-	const char *name = "temp_fbo";
-	Draw::Framebuffer *fbo = draw_->CreateFramebuffer({ w, h, 1, 1, z_stencil, depth, name });
-	if (!fbo)
-		return fbo;
+	char name[128];
+	snprintf(name, sizeof(name), "temp_fbo_%dx%d%s", w, h, z_stencil ? "_depth" : "");
+	Draw::Framebuffer *fbo = draw_->CreateFramebuffer({ w, h, 1, 1, z_stencil, color_depth, name });
+	if (!fbo) {
+		return nullptr;
+	}
 
 	const TempFBOInfo info = { fbo, gpuStats.numFlips };
 	tempFBOs_[key] = info;
