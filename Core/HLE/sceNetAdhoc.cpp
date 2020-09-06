@@ -281,7 +281,7 @@ int DoBlockingPdpRecv(int uid, AdhocSocketRequest& req, s64& result) {
 }
 
 int DoBlockingPdpSend(int uid, AdhocSocketRequest& req, s64& result, AdhocSendTargets& targetPeers) {
-	SceNetAdhocPdpStat* pdpsocket = pdp[req.id - 1];
+	SceNetAdhocPdpStat* pdpsocket = pdp[req.id - PdpIdStart];
 
 	result = 0;
 	bool retry = false;
@@ -904,10 +904,10 @@ static int sceNetAdhocPdpCreate(const char *mac, int port, int bufferSize, u32 u
 
 							// Find Free Translator Index
 							int i = 0; 
-							for (; i < 255; i++) if (pdp[i] == NULL) break;
+							for (; i < MAX_SOCKET; i++) if (pdp[i] == NULL) break;
 
 							// Found Free Translator Index
-							if (i < 255) {
+							if (i < MAX_SOCKET) {
 								// Fill in Data
 								internal->id = usocket;
 								internal->laddr = *saddr;
@@ -925,7 +925,7 @@ static int sceNetAdhocPdpCreate(const char *mac, int port, int bufferSize, u32 u
 								changeBlockingMode(usocket, 1);
 
 								// Success
-								return i + 256;
+								return i + PdpIdStart;
 							} 
 
 							// Free Memory for Internal Data
@@ -1028,9 +1028,9 @@ static int sceNetAdhocPdpSend(int id, const char *mac, u32 port, void *data, int
 			// Valid Data Length
 			if (len >= 0) { // should we allow 0 size packet (for ping) ?
 				// Valid Socket ID
-				if (id > 255 && id <= 510 && pdp[id - 256] != NULL) {
+				if (id >= PdpIdStart && id < PdpIdEnd && pdp[id - PdpIdStart] != NULL) {
 					// Cast Socket
-					SceNetAdhocPdpStat * socket = pdp[id - 256];
+					SceNetAdhocPdpStat * socket = pdp[id - PdpIdStart];
 
 					// Valid Data Buffer
 					if (data != NULL) {
@@ -1233,9 +1233,9 @@ static int sceNetAdhocPdpRecv(int id, void *addr, void * port, void *buf, void *
 	int * len = (int *)dataLength;
 	if (netAdhocInited) {
 		// Valid Socket ID
-		if (id > 255 && id <= 510 && pdp[id - 256] != NULL) {
+		if (id >= PdpIdStart && id < PdpIdEnd && pdp[id - PdpIdStart] != NULL) {
 			// Cast Socket
-			SceNetAdhocPdpStat * socket = pdp[id - 256];
+			SceNetAdhocPdpStat * socket = pdp[id - PdpIdStart];
 
 			// Valid Arguments
 			if (saddr != NULL && port != NULL && buf != NULL && len != NULL && *len > 0) { 
@@ -1413,14 +1413,14 @@ int PollAdhocSocket(SceNetAdhocPollSd* sds, int count, int timeout) {
 	for (int i = 0; i < count; i++) {
 		sds[i].revents = 0;
 		// Fill in Socket ID
-		if (sds[i].id <= 255 && ptp[sds[i].id - 1] != NULL) {
+		if (sds[i].id <= MAX_SOCKET && ptp[sds[i].id - 1] != NULL) {
 			fd = ptp[sds[i].id - 1]->id;
 			if (ptp[sds[i].id - 1]->state == ADHOC_PTP_STATE_LISTEN) sds[i].revents |= ADHOC_EV_ACCEPT;
 			else
 				if (ptp[sds[i].id - 1]->state == ADHOC_PTP_STATE_CLOSED) sds[i].revents |= ADHOC_EV_CONNECT;
 		}
 		else {
-			fd = pdp[sds[i].id - 256]->id;
+			fd = pdp[sds[i].id - PdpIdStart]->id;
 		}
 		if (fd > maxfd) maxfd = fd;
 		if (sds[i].events & ADHOC_EV_RECV) FD_SET(fd, &readfds);
@@ -1435,11 +1435,11 @@ int PollAdhocSocket(SceNetAdhocPollSd* sds, int count, int timeout) {
 	if (affectedsockets > 0) {
 		affectedsockets = 0;
 		for (int i = 0; i < count; i++) {
-			if (sds[i].id <= 255 && ptp[sds[i].id - 1] != NULL) {
+			if (sds[i].id <= MAX_SOCKET && ptp[sds[i].id - 1] != NULL) {
 				fd = ptp[sds[i].id - 1]->id;
 			}
 			else {
-				fd = pdp[sds[i].id - 256]->id;
+				fd = pdp[sds[i].id - PdpIdStart]->id;
 			}
 			if (FD_ISSET(fd, &readfds))
 				sds[i].revents |= ADHOC_EV_RECV;
@@ -1468,7 +1468,7 @@ int sceNetAdhocPollSocket(u32 socketStructAddr, int count, int timeout, int nonb
 			for (int i = 0; i < count; i++)
 			{
 				// Invalid Socket
-				if (sds[i].id < 1 || sds[i].id > 510 || (pdp[sds[i].id - 256] == NULL && ptp[sds[i].id - 1] == NULL)) 
+				if (sds[i].id < 1 || sds[i].id >= PdpIdEnd || (pdp[sds[i].id - PdpIdStart] == NULL && ptp[sds[i].id - 1] == NULL))
 					return hleLogDebug(SCENET, ERROR_NET_ADHOC_INVALID_SOCKET_ID, "invalid socket id");
 			}
 
@@ -1526,9 +1526,9 @@ int NetAdhocPdp_Delete(int id, int unknown) {
 	// Library is initialized
 	if (netAdhocInited) {
 		// Valid Arguments
-		if (id > 255 && id <= 510) {
+		if (id >= PdpIdStart && id < PdpIdEnd) {
 			// Cast Socket
-			SceNetAdhocPdpStat* sock = pdp[id - 256];
+			SceNetAdhocPdpStat* sock = pdp[id - PdpIdStart];
 
 			// Valid Socket
 			if (sock != NULL) {
@@ -1544,7 +1544,7 @@ int NetAdhocPdp_Delete(int id, int unknown) {
 				free(sock);
 
 				// Free Translation Slot
-				pdp[id - 256] = NULL;
+				pdp[id - PdpIdStart] = NULL;
 
 				// Success
 				return 0;
@@ -1606,16 +1606,20 @@ static int sceNetAdhocctlGetAdhocId(u32 productStructAddr) {
 	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
 }
 
-// FIXME: Scan probably not a blocking function since there is ADHOCCTL_STATE_SCANNING state that can be polled by the game, right?
+// FIXME: Scan probably not a blocking function since there is ADHOCCTL_STATE_SCANNING state that can be polled by the game, right? But apparently it need to be delayed for Naruto Shippuden Ultimate Ninja Heroes 3
 int sceNetAdhocctlScan() {
 	INFO_LOG(SCENET, "sceNetAdhocctlScan() at %08x", currentMIPS->pc);
+	if (!g_Config.bEnableWlan) {
+		return -1;
+	}
 
 	// Library initialized
 	if (netAdhocctlInited) {
+		int us = adhocEventPollDelayMS * 1000;
 
+		// Only scan when in Disconnected state, otherwise AdhocServer will kick you out
 		if (adhocctlState == ADHOCCTL_STATE_DISCONNECTED) {
 			adhocctlState = ADHOCCTL_STATE_SCANNING;
-			int us = adhocEventPollDelayMS * 1000;
 
 			// Reset Networks/Group list to prevent other threads from using these soon to be replaced networks
 			peerlock.lock();
@@ -1642,15 +1646,20 @@ int sceNetAdhocctlScan() {
 					return WaitAdhocctlState(req, ADHOCCTL_STATE_DISCONNECTED, us, "adhocctl scan");
 				}
 			}
-			else 
-				hleDelayResult(0, "give a little time to be ready to receive the callback", us); // Not delaying here may cause Naruto Shippuden Ultimate Ninja Heroes 3 to get disconnected when the mission started
-
-			// Return Success
-			return 0;
+			else {
+				// Return Success and let friendFinder thread to notify the handler when scan completed
+				// Not delaying here may cause Naruto Shippuden Ultimate Ninja Heroes 3 to get disconnected when the mission started
+				return hleDelayResult(0, "give a little time to be ready to receive the callback", us);
+			}
 		}
+		else if (adhocctlState == ADHOCCTL_STATE_SCANNING)
+			return ERROR_NET_ADHOCCTL_BUSY;
 
-		// Library is busy
-		return ERROR_NET_ADHOCCTL_BUSY; // ERROR_NET_ADHOCCTL_BUSY may trigger the game (ie. Ford Street Racing) to call sceNetAdhocctlDisconnect
+		// Already connected to a group. Should we fake a success?
+		// We need to notify the handler on success, even if it was faked
+		notifyAdhocctlHandlers(ADHOCCTL_EVENT_SCAN, 0);
+		// FIXME: returning ERROR_NET_ADHOCCTL_BUSY may trigger the game (ie. Ford Street Racing) to call sceNetAdhocctlDisconnect, But Not returning a Success(0) will cause Valhalla Knights 2 not working properly
+		return hleDelayResult(0, "give a little time to be ready to receive the callback", us);
 	}
 
 	// Library uninitialized
@@ -1750,6 +1759,7 @@ int sceNetAdhocctlGetScanInfo(u32 sizeAddr, u32 bufAddr) {
 
 // TODO: How many handlers can the PSP actually have for Adhocctl?
 // TODO: Should we allow the same handler to be added more than once?
+// FIXME: Do all Adhocctl HLE returning 0 and expecting error code through callback handler if there were error, instead of returning error code through the HLE ?
 static u32 sceNetAdhocctlAddHandler(u32 handlerPtr, u32 handlerArg) {
 	bool foundHandler = false;
 	u32 retval = 0;
@@ -2093,7 +2103,7 @@ int NetAdhocctl_Create(const char* groupName) {
 				int iResult = send(metasocket, (const char*)&packet, sizeof(packet), 0);
 				int error = errno;
 
-				if (iResult == SOCKET_ERROR) {
+				if (iResult == SOCKET_ERROR && error != EAGAIN && error != EWOULDBLOCK) {
 					ERROR_LOG(SCENET, "Socket error (%i) when sending", error);
 					//return ERROR_NET_ADHOCCTL_NOT_INITIALIZED; // ERROR_NET_ADHOCCTL_DISCONNECTED; // ERROR_NET_ADHOCCTL_BUSY;
 					//Faking success, to prevent Full Auto 2 from freezing while Initializing Network
@@ -2522,10 +2532,10 @@ static int sceNetAdhocPtpOpen(const char *srcmac, int sport, const char *dstmac,
 							if (internal != NULL) {
 								// Find Free Translator ID
 								int i = 0; 
-								for (; i < 255; i++) if (ptp[i] == NULL) break;
+								for (; i < MAX_SOCKET; i++) if (ptp[i] == NULL) break;
 								
 								// Found Free Translator ID
-								if (i < 255) {
+								if (i < MAX_SOCKET) {
 									// Clear Memory
 									memset(internal, 0, sizeof(SceNetAdhocPtpStat));
 									
@@ -2619,10 +2629,10 @@ int AcceptPtpSocket(int ptpId, int newsocket, sockaddr_in& peeraddr, SceNetEther
 			if (internal != NULL) {
 				// Find Free Translator ID
 				int i = 0;
-				for (; i < 255; i++) if (ptp[i] == NULL) break;
+				for (; i < MAX_SOCKET; i++) if (ptp[i] == NULL) break;
 
 				// Found Free Translator ID
-				if (i < 255) {
+				if (i < MAX_SOCKET) {
 					// Clear Memory
 					memset(internal, 0, sizeof(SceNetAdhocPtpStat));
 
@@ -2708,7 +2718,7 @@ static int sceNetAdhocPtpAccept(int id, u32 peerMacAddrPtr, u32 peerPortPtr, int
 	// Library is initialized
 	if (netAdhocInited) {
 		// Valid Socket
-		if (id > 0 && id <= 255 && ptp[id - 1] != NULL) {
+		if (id > 0 && id <= MAX_SOCKET && ptp[id - 1] != NULL) {
 			// Cast Socket
 			SceNetAdhocPtpStat * socket = ptp[id - 1];
 			
@@ -2783,7 +2793,7 @@ static int sceNetAdhocPtpConnect(int id, int timeout, int flag) {
 	if (netAdhocInited)
 	{
 		// Valid Socket
-		if (id > 0 && id <= 255 && ptp[id - 1] != NULL) {
+		if (id > 0 && id <= MAX_SOCKET && ptp[id - 1] != NULL) {
 			// Cast Socket
 			SceNetAdhocPtpStat * socket = ptp[id - 1];
 
@@ -2871,7 +2881,7 @@ int NetAdhocPtp_Close(int id, int unknown) {
 	// Library is initialized
 	if (netAdhocInited) {
 		// Valid Arguments & Atleast one Socket
-		if (id > 0 && id <= 255 && ptp[id - 1] != NULL) {
+		if (id > 0 && id <= MAX_SOCKET && ptp[id - 1] != NULL) {
 			// Cast Socket
 			SceNetAdhocPtpStat* socket = ptp[id - 1];
 
@@ -3007,10 +3017,10 @@ static int sceNetAdhocPtpListen(const char *srcmac, int sport, int bufsize, int 
 								if (internal != NULL) {
 									// Find Free Translator ID
 									int i = 0; 
-									for (; i < 255; i++) if (ptp[i] == NULL) break;
+									for (; i < MAX_SOCKET; i++) if (ptp[i] == NULL) break;
 									
 									// Found Free Translator ID
-									if (i < 255) {
+									if (i < MAX_SOCKET) {
 										// Clear Memory
 										memset(internal, 0, sizeof(SceNetAdhocPtpStat));
 										
@@ -3103,7 +3113,7 @@ static int sceNetAdhocPtpSend(int id, u32 dataAddr, u32 dataSizeAddr, int timeou
 	// Library is initialized
 	if (netAdhocInited) {
 		// Valid Socket
-		if (id > 0 && id <= 255 && ptp[id - 1] != NULL) {
+		if (id > 0 && id <= MAX_SOCKET && ptp[id - 1] != NULL) {
 			// Cast Socket
 			SceNetAdhocPtpStat * socket = ptp[id - 1];
 			
@@ -3191,7 +3201,7 @@ static int sceNetAdhocPtpRecv(int id, u32 dataAddr, u32 dataSizeAddr, int timeou
 	// Library is initialized
 	if (netAdhocInited) {
 		// Valid Socket
-		if (id > 0 && id <= 255 && ptp[id - 1] != NULL && ptp[id - 1]->state == ADHOC_PTP_STATE_ESTABLISHED) {
+		if (id > 0 && id <= MAX_SOCKET && ptp[id - 1] != NULL && ptp[id - 1]->state == ADHOC_PTP_STATE_ESTABLISHED) {
 			// Cast Socket
 			SceNetAdhocPtpStat * socket = ptp[id - 1];
 			
@@ -3289,7 +3299,7 @@ static int sceNetAdhocPtpFlush(int id, int timeout, int nonblock) {
 	// Library initialized
 	if (netAdhocInited) {
 		// Valid Socket
-		if (id > 0 && id <= 255 && ptp[id - 1] != NULL) {
+		if (id > 0 && id <= MAX_SOCKET && ptp[id - 1] != NULL) {
 			// Cast Socket
 			SceNetAdhocPtpStat* socket = ptp[id - 1];
 
@@ -3608,8 +3618,8 @@ static int sceNetAdhocMatchingCreate(int mode, int maxnum, int port, int rxbufle
 								context->hello_int = hello_int; // client might set this to 0
 								if (keepalive_int < 1) context->keepalive_int = PSP_ADHOCCTL_PING_TIMEOUT; else context->keepalive_int = keepalive_int; // client might set this to 0
 								context->keepalivecounter = init_count; // used to multiply keepalive_int as timeout
-								context->timeout = ((u64_le)keepalive_int * (u64_le)init_count);
-								context->timeout = std::max(context->timeout, adhocDefaultTimeout * 1000ULL); // For internet play we need higher timeout than what the game wanted
+								context->timeout = (((u64)(keepalive_int) + (u64)rexmt_int) * (u64)init_count);
+								context->timeout += (adhocDefaultTimeout * 1000ULL); // For internet play we need higher timeout than what the game wanted
 								context->handler = handler;
 
 								// Fill in Selfpeer
@@ -4589,7 +4599,7 @@ void __NetTriggerCallbacks()
 			}
 
 			for (std::map<int, AdhocctlHandler>::iterator it = adhocctlHandlers.begin(); it != adhocctlHandlers.end(); ++it) {
-				DEBUG_LOG(SCENET, "AdhocctlCallback: [ID=%i][EVENT=%i]", it->first, flags);
+				DEBUG_LOG(SCENET, "AdhocctlCallback: [ID=%i][EVENT=%i][Error=%08x]", it->first, flags, error);
 				args[2] = it->second.argument;
 				AfterAdhocMipsCall* after = (AfterAdhocMipsCall*)__KernelCreateAction(actionAfterAdhocMipsCall);
 				after->SetData(it->first, flags, args[2]);
@@ -5437,9 +5447,9 @@ void actOnHelloPacket(SceNetAdhocMatchingContext * context, SceNetEtherAddr * se
 				}
 
 				// Peer available now
-				if (peer != NULL)
+				if (peer != NULL && peer->state != PSP_ADHOC_MATCHING_PEER_OUTGOING_REQUEST && peer->state != PSP_ADHOC_MATCHING_PEER_INCOMING_REQUEST)
 				{
-					// Spawn Hello Event
+					// Spawn Hello Event. FIXME: HELLO event should not be triggered in the middle of joining? This will cause Bleach 7 to Cancel the join request
 					spawnLocalEvent(context, PSP_ADHOC_MATCHING_EVENT_HELLO, sendermac, optlen, opt);
 				}
 			}

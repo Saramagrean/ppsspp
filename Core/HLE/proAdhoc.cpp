@@ -71,8 +71,10 @@ SceNetAdhocctlParameter parameter;
 SceNetAdhocctlAdhocId product_code;
 std::thread friendFinderThread;
 std::recursive_mutex peerlock;
-SceNetAdhocPdpStat * pdp[255];
-SceNetAdhocPtpStat * ptp[255];
+SceNetAdhocPdpStat * pdp[MAX_SOCKET];
+SceNetAdhocPtpStat * ptp[MAX_SOCKET];
+const int PdpIdStart = MAX_SOCKET + 1; //256
+const int PdpIdEnd = PdpIdStart + MAX_SOCKET;
 std::map<int, int> ptpConnectCount;
 std::vector<std::string> chatLog;
 std::string name = "";
@@ -101,7 +103,7 @@ bool isLocalMAC(const SceNetEtherAddr * addr) {
 
 bool isPDPPortInUse(uint16_t port) {
 	// Iterate Elements
-	for (int i = 0; i < 255; i++) if (pdp[i] != NULL && pdp[i]->lport == port) return true;
+	for (int i = 0; i < MAX_SOCKET; i++) if (pdp[i] != NULL && pdp[i]->lport == port) return true;
 
 	// Unused Port
 	return false;
@@ -109,7 +111,7 @@ bool isPDPPortInUse(uint16_t port) {
 
 bool isPTPPortInUse(uint16_t port) {
 	// Iterate Sockets
-	for(int i = 0; i < 255; i++) if(ptp[i] != NULL && ptp[i]->lport == port) return true;
+	for(int i = 0; i < MAX_SOCKET; i++) if(ptp[i] != NULL && ptp[i]->lport == port) return true;
 	
 	// Unused Port
 	return false;
@@ -1230,6 +1232,7 @@ std::vector<std::string> getChatLog() {
 
 int friendFinder(){
 	setCurrentThreadName("FriendFinder");
+	auto n = GetI18NCategory("Networking");
 	// Receive Buffer
 	int rxpos = 0;
 	uint8_t rx[1024];
@@ -1290,6 +1293,7 @@ int friendFinder(){
 							shutdown(metasocket, SD_BOTH);
 							closesocket(metasocket);
 							metasocket = (int)INVALID_SOCKET;
+							host->NotifyUserMessage(std::string(n->T("Disconnected from AdhocServer")) + " (" + std::string(n->T("Error")) + ": " + std::to_string(error) + ")", 2.0, 0x0000ff);
 						}
 					}
 					else {
@@ -1861,7 +1865,7 @@ int getPDPSocketCount()
 	int counter = 0;
 
 	// Count Sockets
-	for (int i = 0; i < 255; i++) if (pdp[i] != NULL) counter++;
+	for (int i = 0; i < MAX_SOCKET; i++) if (pdp[i] != NULL) counter++;
 
 	// Return Socket Count
 	return counter;
@@ -1872,7 +1876,7 @@ int getPTPSocketCount() {
 	int counter = 0;
 
 	// Count Sockets
-	for (int i = 0; i < 255; i++) if (ptp[i] != NULL) counter++;
+	for (int i = 0; i < MAX_SOCKET; i++) if (ptp[i] != NULL) counter++;
 
 	// Return Socket Count
 	return counter;
