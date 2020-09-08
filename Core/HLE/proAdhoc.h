@@ -248,8 +248,8 @@ typedef struct SceNetAdhocctlNickname {
 typedef struct SceNetAdhocctlParameter {
   s32_le channel;
   SceNetAdhocctlGroupName group_name; // This group name is probably similar to SSID name on AP
-  SceNetAdhocctlBSSId bssid;
-  SceNetAdhocctlNickname nickname;
+  SceNetAdhocctlNickname nickname; // According to the old PSPSDK this is the bssid, but according to the dumped content when using newer firmware this is the nickname (this is also the nickname on VitaSDK)
+  SceNetAdhocctlBSSId bssid; // FIXME: bssid and nickname position might be swapped on older/newer firmware?
 } PACK SceNetAdhocctlParameter;
 
 // Peer Information (internal use only)
@@ -270,7 +270,7 @@ typedef struct SceNetAdhocctlPeerInfoEmu {
   SceNetAdhocctlNickname nickname;
   SceNetEtherAddr mac_addr;
   u16_le padding; //00 00
-  u32_le flags; //00 04 00 00 // State of the peer? Or related to sceNetAdhocAuth_CF4D9BED ?
+  u32_le flags; //00 04 00 00 on KHBBS and FF FF FF FF on Ys vs. Sora no Kiseki // State of the peer? Or related to sceNetAdhocAuth_CF4D9BED ?
   u64_le last_recv; // Need to use the same method with sceKernelGetSystemTimeWide (ie. CoreTiming::GetGlobalTimeUsScaled) to prevent timing issue (ie. in game timeout)
 } PACK SceNetAdhocctlPeerInfoEmu;
 
@@ -302,18 +302,29 @@ typedef struct SceNetAdhocPollSd{
   s32_le revents;
 } PACK SceNetAdhocPollSd;
 
-// PDP Socket Status
-typedef struct SceNetAdhocPdpStat{
+// PDP Socket Status (Internal use only)
+typedef struct SceNetAdhocPdpStatInternal{
   u32_le next; // struct SceNetAdhocPdpStat * next;
   s32_le id;
   SceNetEtherAddr laddr;
   u16_le lport;
   u32_le rcv_sb_cc;
-} PACK SceNetAdhocPdpStat;
 
-// PTP Socket Status
-typedef struct SceNetAdhocPtpStat {
-  u32_le next; // Changed the pointer to u32
+  s32_le flags; // Socket Alert Flags
+} PACK SceNetAdhocPdpStatInternal;
+
+// PDP Socket Status
+typedef struct SceNetAdhocPdpStatEmu {
+	u32_le next; 
+	s32_le id;
+	SceNetEtherAddr laddr;
+	u16_le lport;
+	u32_le rcv_sb_cc;
+} PACK SceNetAdhocPdpStatEmu;
+
+// PTP Socket Status (Internal use only)
+typedef struct SceNetAdhocPtpStatInternal {
+  u32_le next; // struct SceNetAdhocPtpStat * next;
   s32_le id;
   SceNetEtherAddr laddr;
   SceNetEtherAddr paddr;
@@ -322,7 +333,22 @@ typedef struct SceNetAdhocPtpStat {
   s32_le snd_sb_cc;
   s32_le rcv_sb_cc;
   s32_le state;
-} PACK SceNetAdhocPtpStat;
+
+  s32_le flags; // Socket Alert Flags
+} PACK SceNetAdhocPtpStatInternal;
+
+// PTP Socket Status
+typedef struct SceNetAdhocPtpStatEmu {
+	u32_le next; // Changed the pointer to u32
+	s32_le id;
+	SceNetEtherAddr laddr;
+	SceNetEtherAddr paddr;
+	u16_le lport;
+	u16_le pport;
+	s32_le snd_sb_cc;
+	s32_le rcv_sb_cc;
+	s32_le state;
+} PACK SceNetAdhocPtpStatEmu;
 
 // Gamemode Optional Peer Buffer Data
 typedef struct SceNetAdhocGameModeOptData {
@@ -827,10 +853,10 @@ extern SceNetAdhocctlParameter parameter;
 extern SceNetAdhocctlAdhocId product_code;
 extern std::thread friendFinderThread;
 extern std::recursive_mutex peerlock;
-extern SceNetAdhocPdpStat * pdp[MAX_SOCKET];
-extern SceNetAdhocPtpStat * ptp[MAX_SOCKET];
-extern const int PdpIdStart;
-extern const int PdpIdEnd;
+extern SceNetAdhocPdpStatInternal * pdp[MAX_SOCKET];
+extern SceNetAdhocPtpStatInternal * ptp[MAX_SOCKET];
+extern const int PdpIdStart;  //256
+extern const int PdpIdEnd; //511
 extern std::map<int, int> ptpConnectCount;
 
 union SockAddrIN4 {
@@ -1213,6 +1239,11 @@ int getSockNoDelay(int tcpsock);
 * Set TCP Socket TCP_NODELAY (Nagle Algo)
 */
 int setSockNoDelay(int tcpsock, int flag);
+
+/*
+* Set Socket SO_NOSIGPIPE when supported
+*/
+int setSockNoSIGPIPE(int sock, int flag);
 
 /*
 * Set Socket KeepAlive (opt = SO_KEEPALIVE)

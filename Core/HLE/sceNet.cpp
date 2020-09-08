@@ -244,7 +244,9 @@ void __NetDoState(PointerWrap &p) {
 		Do(p, netApctlState);
 		Do(p, netApctlInfo);
 		Do(p, actionAfterApctlMipsCall);
-		__KernelRestoreActionType(actionAfterApctlMipsCall, AfterApctlMipsCall::Create);
+		if (actionAfterApctlMipsCall != -1) {
+			__KernelRestoreActionType(actionAfterApctlMipsCall, AfterApctlMipsCall::Create);
+		}
 		Do(p, apctlThreadHackAddr);
 		Do(p, apctlThreadID);
 	}
@@ -645,7 +647,7 @@ static u32 sceWlanGetSwitchState() {
 
 // Probably a void function, but often returns a useful value.
 static void sceNetEtherNtostr(u32 macPtr, u32 bufferPtr) {
-	DEBUG_LOG(SCENET, "sceNetEtherNtostr(%08x, %08x)", macPtr, bufferPtr);
+	DEBUG_LOG(SCENET, "sceNetEtherNtostr(%08x, %08x) at %08x", macPtr, bufferPtr, currentMIPS->pc);
 
 	if (Memory::IsValidAddress(bufferPtr) && Memory::IsValidAddress(macPtr)) {
 		char *buffer = (char *)Memory::GetPointer(bufferPtr);
@@ -710,7 +712,7 @@ static void sceNetEtherStrton(u32 bufferPtr, u32 macPtr) {
 
 // Write static data since we don't actually manage any memory for sceNet* yet.
 static int sceNetGetMallocStat(u32 statPtr) {
-	WARN_LOG(SCENET, "UNTESTED sceNetGetMallocStat(%x)", statPtr);
+	DEBUG_LOG(SCENET, "UNTESTED sceNetGetMallocStat(%x)", statPtr);
 	if(Memory::IsValidAddress(statPtr))
 		Memory::WriteStruct(statPtr, &netMallocStat);
 	else
