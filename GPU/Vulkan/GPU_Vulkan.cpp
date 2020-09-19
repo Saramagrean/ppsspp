@@ -224,9 +224,9 @@ void GPU_Vulkan::CheckGPUFeatures() {
 
 	// Mandatory features on Vulkan, which may be checked in "centralized" code
 	features |= GPU_SUPPORTS_TEXTURE_LOD_CONTROL;
-	features |= GPU_SUPPORTS_FBO;
+	features |= GPU_SUPPORTS_FRAMEBUFFER_BLIT;
 	features |= GPU_SUPPORTS_BLEND_MINMAX;
-	features |= GPU_SUPPORTS_ANY_COPY_IMAGE;
+	features |= GPU_SUPPORTS_COPY_IMAGE;
 	features |= GPU_SUPPORTS_OES_TEXTURE_NPOT;
 	features |= GPU_SUPPORTS_INSTANCE_RENDERING;
 	features |= GPU_SUPPORTS_VERTEX_TEXTURE_FETCH;
@@ -565,7 +565,7 @@ void GPU_Vulkan::GetStats(char *buffer, size_t bufsize) {
 		"Vertices submitted: %i\n"
 		"Cached, Uncached Vertices Drawn: %i, %i\n"
 		"FBOs active: %i (evaluations: %d)\n"
-		"Textures active: %i, decoded: %i  invalidated: %i\n"
+		"Textures active: %i, decoded: %i  invalidated: %d (%d by fb)\n"
 		"Readbacks: %d, uploads: %d\n"
 		"Vertex, Fragment, Pipelines loaded: %i, %i, %i\n"
 		"Pushbuffer space used: UBO %d, Vtx %d, Idx %d\n"
@@ -587,6 +587,7 @@ void GPU_Vulkan::GetStats(char *buffer, size_t bufsize) {
 		(int)textureCacheVulkan_->NumLoadedTextures(),
 		gpuStats.numTexturesDecoded,
 		gpuStats.numTextureInvalidations,
+		gpuStats.numTextureInvalidationsByFramebuffer,
 		gpuStats.numReadbacks,
 		gpuStats.numUploads,
 		shaderManagerVulkan_->GetNumVertexShaders(),

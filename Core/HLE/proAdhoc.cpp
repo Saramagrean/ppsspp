@@ -77,7 +77,6 @@ SceNetAdhocctlAdhocId product_code;
 std::thread friendFinderThread;
 std::recursive_mutex peerlock;
 AdhocSocket* adhocSockets[MAX_SOCKET];
-std::map<int, int> ptpConnectCount;
 std::vector<std::string> chatLog;
 std::string name = "";
 std::string incoming = "";
@@ -245,7 +244,7 @@ int IsSocketReady(int fd, bool readfd, bool writefd, int* errorcode, int timeout
 	tval.tv_sec = timeoutUS / 1000000;
 	tval.tv_usec = timeoutUS % 1000000;
 
-	int ret = select(fd + 1, &readfds, &writefds, nullptr, &tval);
+	int ret = select(fd + 1, readfd? &readfds: nullptr, writefd? &writefds: nullptr, nullptr, &tval);
 	if (errorcode != nullptr)
 		*errorcode = errno;
 
@@ -1322,12 +1321,14 @@ int friendFinder(){
 							closesocket(metasocket);
 							metasocket = (int)INVALID_SOCKET;
 							host->NotifyUserMessage(std::string(n->T("Disconnected from AdhocServer")) + " (" + std::string(n->T("Error")) + ": " + std::to_string(error) + ")", 2.0, 0x0000ff);
+							// Mark all friends as timedout since we won't be able to detects disconnected friends anymore without being connected to Adhoc Server
+							timeoutFriendsRecursive(friends);
 						}
 					}
 					else {
 						// Update Ping Time
 						lastping = now;
-						DEBUG_LOG(SCENET, "FriendFinder: Sending OPCODE_PING (%llu)", now);
+						DEBUG_LOG(SCENET, "FriendFinder: Sending OPCODE_PING (%llu)", static_cast<unsigned long long>(now));
 					}
 				}
 			}
@@ -1989,13 +1990,13 @@ int initNetwork(SceNetAdhocctlAdhocId *adhoc_id){
 
 	if (iResult == SOCKET_ERROR && errorcode != EISCONN) {
 		u64 startTime = (u64)(real_time_now() * 1000.0);
-		while (IsSocketReady(metasocket, true, true) <= 0) {
+		while (IsSocketReady(metasocket, false, true) <= 0) {
 			u64 now = (u64)(real_time_now() * 1000.0);
 			if (coreState == CORE_POWERDOWN) return iResult;
 			if (now - startTime > adhocDefaultTimeout) break;
 			sleep_ms(10);
 		}
-		if (IsSocketReady(metasocket, true, true) <= 0) {
+		if (IsSocketReady(metasocket, false, true) <= 0) {
 			ERROR_LOG(SCENET, "Socket error (%i) when connecting to AdhocServer [%s/%s:%u]", errorcode, g_Config.proAdhocServer.c_str(), inet_ntoa(g_adhocServerIP.in.sin_addr), ntohs(g_adhocServerIP.in.sin_port));
 			host->NotifyUserMessage(n->T("Failed to connect to Adhoc Server"), 1.0f, 0x0000ff);
 			return iResult;

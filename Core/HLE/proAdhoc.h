@@ -96,7 +96,7 @@ inline bool connectInProgress(int errcode){ return (errcode == EAGAIN || errcode
 #endif
 
 #ifndef SD_BOTH
-#define SD_BOTH 0x02
+#define SD_BOTH SHUT_RDWR //0x02
 #endif
 
 #define IsMatch(buf1, buf2)	(memcmp(&buf1, &buf2, sizeof(buf1)) == 0)
@@ -326,8 +326,12 @@ typedef struct SceNetAdhocPtpStat {
 
 // PDP & PTP Socket Union (Internal use only)
 typedef struct AdhocSocket {
-	s32_le type;
+	s32_le type; // SOCK_PDP/SOCK_PTP
 	s32_le flags; // Socket Alert Flags
+	u32 send_timeout; // default connect timeout
+	u32 recv_timeout; // default accept timeout
+	s32 retry_count; // combined with timeout to be used on keepalive
+	s32 attemptCount; // connect/accept attempts
 	union {
 		SceNetAdhocPdpStat pdp;
 		SceNetAdhocPtpStat ptp;
@@ -840,7 +844,6 @@ extern SceNetAdhocctlAdhocId product_code;
 extern std::thread friendFinderThread;
 extern std::recursive_mutex peerlock;
 extern AdhocSocket* adhocSockets[MAX_SOCKET];
-extern std::map<int, int> ptpConnectCount;
 
 union SockAddrIN4 {
 	sockaddr addr;
@@ -987,9 +990,9 @@ void deleteFriendByIP(uint32_t ip);
  * Recursive Memory Freeing-Helper for Friend-Structures
  * @param node Current Node in List
  */
-void freeFriendsRecursive(SceNetAdhocctlPeerInfo * node, int32_t* count);
+void freeFriendsRecursive(SceNetAdhocctlPeerInfo * node, int32_t* count = nullptr);
 
-void timeoutFriendsRecursive(SceNetAdhocctlPeerInfo * node, int32_t* count);
+void timeoutFriendsRecursive(SceNetAdhocctlPeerInfo * node, int32_t* count = nullptr);
 
 /**
  * Friend Finder Thread (Receives Peer Information)

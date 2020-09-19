@@ -15,7 +15,6 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include <set>
 #include <algorithm>
 
 #include "profiler/profiler.h"
@@ -267,24 +266,6 @@ void FramebufferManagerVulkan::ReformatFramebufferFrom(VirtualFramebuffer *vfb, 
 		// Need to dirty anything that has command buffer dynamic state, in case we started a new pass above.
 		// Should find a way to feed that information back, maybe... Or simply correct the issue in the rendermanager.
 		gstate_c.Dirty(DIRTY_DEPTHSTENCIL_STATE | DIRTY_VIEWPORTSCISSOR_STATE | DIRTY_BLEND_STATE);
-	}
-}
-
-// Except for a missing rebind and silly scissor enables, identical copy of the same function in GPU_GLES - tricky parts are in thin3d.
-void FramebufferManagerVulkan::BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst) {
-	bool matchingDepthBuffer = src->z_address == dst->z_address && src->z_stride != 0 && dst->z_stride != 0;
-	bool matchingSize = src->width == dst->width && src->height == dst->height;
-	bool matchingRenderSize = src->renderWidth == dst->renderWidth && src->renderHeight == dst->renderHeight;
-	if (matchingDepthBuffer && matchingRenderSize && matchingSize) {
-		// TODO: Currently, this copies depth AND stencil, which is a problem.  See #9740.
-		draw_->CopyFramebufferImage(src->fbo, 0, 0, 0, 0, dst->fbo, 0, 0, 0, 0, src->renderWidth, src->renderHeight, 1, Draw::FB_DEPTH_BIT, "BlitFramebufferDepth");
-		dst->last_frame_depth_updated = gpuStats.numFlips;
-	} else if (matchingDepthBuffer && matchingSize) {
-		/*
-		int w = std::min(src->renderWidth, dst->renderWidth);
-		int h = std::min(src->renderHeight, dst->renderHeight);
-		draw_->BlitFramebuffer(src->fbo, 0, 0, w, h, dst->fbo, 0, 0, w, h, Draw::FB_DEPTH_BIT, Draw::FB_BLIT_NEAREST);
-		*/
 	}
 }
 

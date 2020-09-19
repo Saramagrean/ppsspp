@@ -16,9 +16,8 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <cstring>
-#include "IndexGenerator.h"
 
-#include "Common/Common.h"
+#include "IndexGenerator.h"
 
 // Points don't need indexing...
 const u8 IndexGenerator::indexedPrimitiveType[7] = {
@@ -88,12 +87,22 @@ void IndexGenerator::AddStrip(int numVerts, bool clockwise) {
 	const int numTris = numVerts - 2;
 	u16 *outInds = inds_;
 	int ibase = index_;
-	for (int i = 0; i < numTris; i++) {
+	size_t numPairs = numTris / 2;
+	while (numPairs > 0) {
+		*outInds++ = ibase;
+		*outInds++ = ibase + wind;
+		*outInds++ = ibase + (wind ^ 3);
+		*outInds++ = ibase + 1;
+		*outInds++ = ibase + 1 + (wind ^ 3);
+		*outInds++ = ibase + 1 + wind;
+		ibase += 2;
+		numPairs--;
+	}
+	if (numTris & 1) {
 		*outInds++ = ibase;
 		*outInds++ = ibase + wind;
 		wind ^= 3;  // toggle between 1 and 2
 		*outInds++ = ibase + wind;
-		ibase++;
 	}
 	inds_ = outInds;
 	index_ += numVerts;

@@ -30,9 +30,8 @@
 
 enum TextureFiltering {
 	TEX_FILTER_AUTO = 1,
-	TEX_FILTER_NEAREST = 2,
-	TEX_FILTER_LINEAR = 3,
-	TEX_FILTER_LINEAR_VIDEO = 4,
+	TEX_FILTER_FORCE_NEAREST = 2,
+	TEX_FILTER_FORCE_LINEAR = 3,
 };
 
 enum FramebufferNotification {
@@ -246,7 +245,7 @@ public:
 
 	// FramebufferManager keeps TextureCache updated about what regions of memory are being rendered to,
 	// so that it can invalidate TexCacheEntries pointed at those addresses.
-	void NotifyFramebuffer(u32 address, VirtualFramebuffer *framebuffer, FramebufferNotification msg, FramebufferNotificationChannel channel);
+	void NotifyFramebuffer(VirtualFramebuffer *framebuffer, FramebufferNotification msg, FramebufferNotificationChannel channel);
 	void NotifyVideoUpload(u32 addr, int size, int width, GEBufferFormat fmt);
 
 	size_t NumLoadedTextures() const {
@@ -285,8 +284,9 @@ protected:
 	}
 
 	u32 EstimateTexMemoryUsage(const TexCacheEntry *entry);
-	void GetSamplingParams(int &minFilt, int &magFilt, bool &sClamp, bool &tClamp, float &lodBias, int maxLevel, u32 addr, GETexLevelMode &mode);
-	void UpdateSamplingParams(TexCacheEntry &entry, SamplerCacheKey &key);  // Used by D3D11 and Vulkan.
+
+	SamplerCacheKey GetSamplingParams(int maxLevel, u32 texAddr);
+	SamplerCacheKey GetFramebufferSamplingParams(u16 bufferWidth, u16 bufferHeight);
 	void UpdateMaxSeenV(TexCacheEntry *entry, bool throughMode);
 
 	FramebufferMatchInfo MatchFramebuffer(const TextureDefinition &entry, VirtualFramebuffer *framebuffer, u32 texaddrOffset, FramebufferNotificationChannel channel) const;

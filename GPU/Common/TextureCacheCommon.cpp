@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <algorithm>
+
 #include "ppsspp_config.h"
 #include "profiler/profiler.h"
 #include "Common/ColorConv.h"
@@ -146,85 +147,49 @@ static int TexLog2(float delta) {
 	return useful - 127 * 256;
 }
 
-void TextureCacheCommon::GetSamplingParams(int &minFilt, int &magFilt, bool &sClamp, bool &tClamp, float &lodBias, int maxLevel, u32 addr, GETexLevelMode &mode) {
-	minFilt = gstate.texfilter & 0x7;
-	magFilt = gstate.isMagnifyFilteringEnabled();
-	sClamp = gstate.isTexCoordClampedS();
-	tClamp = gstate.isTexCoordClampedT();
+SamplerCacheKey TextureCacheCommon::GetSamplingParams(int maxLevel, u32 texAddr) {
+	SamplerCacheKey key;
+
+	int minFilt = gstate.texfilter & 0x7;
+	key.minFilt = minFilt & 1;
+	key.mipEnable = (minFilt >> 2) & 1;
+	key.mipFilt = (minFilt >> 1) & 1;
+	key.magFilt = gstate.isMagnifyFilteringEnabled();
+	key.sClamp = gstate.isTexCoordClampedS();
+	key.tClamp = gstate.isTexCoordClampedT();
+	key.aniso = false;
 
 	GETexLevelMode mipMode = gstate.getTexLevelMode();
-	mode = mipMode;
 	bool autoMip = mipMode == GE_TEXLEVEL_MODE_AUTO;
-	lodBias = (float)gstate.getTexLevelOffset16() * (1.0f / 16.0f);
+
+	// TODO: Slope mipmap bias is still not well understood.
+	float lodBias = (float)gstate.getTexLevelOffset16() * (1.0f / 16.0f);
 	if (mipMode == GE_TEXLEVEL_MODE_SLOPE) {
 		lodBias += 1.0f + TexLog2(gstate.getTextureLodSlope()) * (1.0f / 256.0f);
 	}
 
 	// If mip level is forced to zero, disable mipmapping.
 	bool noMip = maxLevel == 0 || (!autoMip && lodBias <= 0.0f);
-	if (IsFakeMipmapChange())
+	if (IsFakeMipmapChange()) {
 		noMip = noMip || !autoMip;
+	}
 
 	if (noMip) {
 		// Enforce no mip filtering, for safety.
-		minFilt &= 1; // no mipmaps yet
+		key.mipEnable = false;
+		key.mipFilt = 0;
 		lodBias = 0.0f;
 	}
-
-	if (g_Config.iTexFiltering == TEX_FILTER_LINEAR_VIDEO) {
-		bool isVideo = videos_.find(addr & 0x3FFFFFFF) != videos_.end();
-		if (isVideo) {
-			magFilt |= 1;
-			minFilt |= 1;
-		}
-	}
-	if (g_Config.iTexFiltering == TEX_FILTER_LINEAR && (!gstate.isColorTestEnabled() || IsColorTestTriviallyTrue())) {
-		if (!gstate.isAlphaTestEnabled() || IsAlphaTestTriviallyTrue()) {
-			magFilt |= 1;
-			minFilt |= 1;
-		}
-	}
-	bool forceNearest = g_Config.iTexFiltering == TEX_FILTER_NEAREST;
-	// Force Nearest when color test enabled and rendering resolution greater than 480x272
-	if ((gstate.isColorTestEnabled() && !IsColorTestTriviallyTrue()) && g_Config.iInternalResolution != 1 && gstate.isModeThrough()) {
-		// Some games use 0 as the color test color, which won't be too bad if it bleeds.
-		// Fuchsia and green, etc. are the problem colors.
-		if (gstate.getColorTestRef() != 0) {
-			forceNearest = true;
-		}
-	}
-	if (forceNearest) {
-		magFilt &= ~1;
-		minFilt &= ~1;
-	}
-}
-
-void TextureCacheCommon::UpdateSamplingParams(TexCacheEntry &entry, SamplerCacheKey &key) {
-	// TODO: Make GetSamplingParams write SamplerCacheKey directly
-	int minFilt;
-	int magFilt;
-	bool sClamp;
-	bool tClamp;
-	float lodBias;
-	int maxLevel = (entry.status & TexCacheEntry::STATUS_BAD_MIPS) ? 0 : entry.maxLevel;
-	GETexLevelMode mode;
-	GetSamplingParams(minFilt, magFilt, sClamp, tClamp, lodBias, maxLevel, entry.addr, mode);
-	key.minFilt = minFilt & 1;
-	key.mipEnable = (minFilt >> 2) & 1;
-	key.mipFilt = (minFilt >> 1) & 1;
-	key.magFilt = magFilt & 1;
-	key.sClamp = sClamp;
-	key.tClamp = tClamp;
-	key.aniso = false;
 
 	if (!key.mipEnable) {
 		key.maxLevel = 0;
 		key.minLevel = 0;
 		key.lodBias = 0;
+		key.mipFilt = 0;
 	} else {
-		switch (mode) {
+		switch (mipMode) {
 		case GE_TEXLEVEL_MODE_AUTO:
-			key.maxLevel = entry.maxLevel * 256;
+			key.maxLevel = maxLevel * 256;
 			key.minLevel = 0;
 			key.lodBias = (int)(lodBias * 256.0f);
 			if (gstate_c.Supports(GPU_SUPPORTS_ANISOTROPY) && g_Config.iAnisotropyLevel > 0) {
@@ -241,12 +206,73 @@ void TextureCacheCommon::UpdateSamplingParams(TexCacheEntry &entry, SamplerCache
 			// It's incorrect to use the slope as a bias. Instead it should be passed
 			// into the shader directly as an explicit lod level, with the bias on top. For now, we just kill the
 			// lodBias in this mode, working around #9772.
-			key.maxLevel = entry.maxLevel * 256;
+			key.maxLevel = maxLevel * 256;
 			key.minLevel = 0;
 			key.lodBias = 0;
 			break;
 		}
 	}
+
+	// Video bilinear override
+	if (!key.magFilt && texAddr != 0) {
+		if (videos_.find(texAddr & 0x3FFFFFFF) != videos_.end()) {
+			// Enforce bilinear filtering on magnification.
+			key.magFilt = 1;
+		}
+	}
+
+	// Filtering overrides
+	switch (g_Config.iTexFiltering) {
+	case TEX_FILTER_AUTO:
+		// Follow what the game wants. We just do a single heuristic change to avoid bleeding of wacky color test colors
+		// in higher resolution (used by some games for sprites, and they accidentally have linear filter on).
+		if (gstate.isModeThrough() && g_Config.iInternalResolution != 1) {
+			bool uglyColorTest = gstate.isColorTestEnabled() && !IsColorTestTriviallyTrue() && gstate.getColorTestRef() != 0;
+			if (uglyColorTest) {
+				// Force to nearest.
+				key.magFilt = 0;
+				key.minFilt = 0;
+			}
+		}
+		break;
+	case TEX_FILTER_FORCE_LINEAR:
+		// Override to linear filtering if there's no alpha or color testing going on.
+		if ((!gstate.isColorTestEnabled() || IsColorTestTriviallyTrue()) &&
+			(!gstate.isAlphaTestEnabled() || IsAlphaTestTriviallyTrue())) {
+			key.magFilt = 1;
+			key.minFilt = 1;
+			key.mipFilt = 1;
+		}
+		break;
+	case TEX_FILTER_FORCE_NEAREST:
+	default:
+		// Just force to nearest without checks. Safe (but ugly).
+		key.magFilt = 0;
+		key.minFilt = 0;
+		break;
+	}
+
+	return key;
+}
+
+SamplerCacheKey TextureCacheCommon::GetFramebufferSamplingParams(u16 bufferWidth, u16 bufferHeight) {
+	SamplerCacheKey key = GetSamplingParams(0, 0);
+
+	// Kill any mipmapping settings.
+	key.mipEnable = false;
+	key.minFilt &= 1;
+	key.mipFilt = 0;
+	key.magFilt &= 1;
+	key.aniso = 0.0;
+
+	// Often the framebuffer will not match the texture size. We'll wrap/clamp in the shader in that case.
+	int w = gstate.getTextureWidth(0);
+	int h = gstate.getTextureHeight(0);
+	if (w != bufferWidth || h != bufferHeight) {
+		key.sClamp = true;
+		key.tClamp = true;
+	}
+	return key;
 }
 
 void TextureCacheCommon::UpdateMaxSeenV(TexCacheEntry *entry, bool throughMode) {
@@ -340,7 +366,7 @@ TexCacheEntry *TextureCacheCommon::SetTexture(bool force) {
 
 	u32 texhash = MiniHash((const u32 *)Memory::GetPointerUnchecked(texaddr));
 
-	TexCache::iterator iter = cache_.find(cachekey);
+	TexCache::iterator entryIter = cache_.find(cachekey);
 	TexCacheEntry *entry = nullptr;
 
 	// Note: It's necessary to reset needshadertexclamp, for otherwise DIRTY_TEXCLAMP won't get set later.
@@ -352,8 +378,8 @@ TexCacheEntry *TextureCacheCommon::SetTexture(bool force) {
 	}
 	gstate_c.bgraTexture = isBgraBackend_;
 
-	if (iter != cache_.end()) {
-		entry = iter->second.get();
+	if (entryIter != cache_.end()) {
+		entry = entryIter->second.get();
 		// Validate the texture still matches the cache entry.
 		bool match = entry->Matches(dim, format, maxLevel);
 		const char *reason = "different params";
@@ -361,6 +387,7 @@ TexCacheEntry *TextureCacheCommon::SetTexture(bool force) {
 		// Check for FBO changes.
 		if (entry->status & TexCacheEntry::STATUS_FRAMEBUFFER_OVERLAP) {
 			// Fall through to the end where we'll delete the entry if there's a framebuffer.
+			entry->status &= ~TexCacheEntry::STATUS_FRAMEBUFFER_OVERLAP;
 			match = false;
 		}
 
@@ -462,6 +489,11 @@ TexCacheEntry *TextureCacheCommon::SetTexture(bool force) {
 	if (candidates.size() > 0) {
 		int index = GetBestCandidateIndex(candidates);
 		if (index != -1) {
+			// If we had a texture entry here, let's get rid of it.
+			if (entryIter != cache_.end()) {
+				DeleteTexture(entryIter);
+			}
+
 			nextTexture_ = nullptr;
 			nextNeedsRebuild_ = false;
 			SetTextureFramebuffer(candidates[index]);
@@ -526,6 +558,9 @@ TexCacheEntry *TextureCacheCommon::SetTexture(bool force) {
 	gstate_c.curTextureHeight = h;
 
 	nextTexture_ = entry;
+	if (nextFramebufferTexture_) {
+		nextFramebufferTexture_ = nullptr;  // in case it was accidentally set somehow?
+	}
 	nextNeedsRehash_ = false;
 	// We still need to rebuild, to allocate a texture.  But we'll bail early.
 	nextNeedsRebuild_ = true;
@@ -706,20 +741,24 @@ void TextureCacheCommon::HandleTextureChange(TexCacheEntry *const entry, const c
 	entry->numFrames = 0;
 }
 
-void TextureCacheCommon::NotifyFramebuffer(u32 address, VirtualFramebuffer *framebuffer, FramebufferNotification msg, FramebufferNotificationChannel channel) {
+void TextureCacheCommon::NotifyFramebuffer(VirtualFramebuffer *framebuffer, FramebufferNotification msg, FramebufferNotificationChannel channel) {
 	// Mask to ignore the Z memory mirrors if the address is in VRAM.
 	// These checks are mainly to reduce scanning all textures.
+
 	const u32 mirrorMask = 0x00600000;
+	const u32 address = channel == NOTIFY_FB_COLOR ? framebuffer->fb_address : framebuffer->z_address;
 	const u32 addr = Memory::IsVRAMAddress(address) ? (address & ~mirrorMask) : address;
 	const u32 bpp = (framebuffer->format == GE_FORMAT_8888 && channel == NOTIFY_FB_COLOR) ? 4 : 2;
+	const u32 stride = channel == NOTIFY_FB_COLOR ? framebuffer->fb_stride : framebuffer->z_stride;
+
+	// NOTE: Some games like Burnout massively misdetects the height of some framebuffers, leading to a lot of unnecessary invalidations.
+	// Let's only actually get rid of textures that cover the very start of the framebuffer.
+	const u32 endAddr = addr + stride * std::min((int)framebuffer->height, 16) * bpp;
+
 	const u64 cacheKey = (u64)addr << 32;
 	// If it has a clut, those are the low 32 bits, so it'll be inside this range.
 	// Also, if it's a subsample of the buffer, it'll also be within the FBO.
-	const u64 cacheKeyEnd = cacheKey + ((u64)(framebuffer->fb_stride * framebuffer->height * bpp) << 32);
-
-	// The first mirror starts at 0x04200000 and there are 3.  We search all for framebuffers.
-	const u64 mirrorCacheKey = (u64)0x04200000 << 32;
-	const u64 mirrorCacheKeyEnd = (u64)0x04800000 << 32;
+	const u64 cacheKeyEnd = (u64)endAddr << 32;
 
 	switch (msg) {
 	case NOTIFY_FB_CREATED:
@@ -734,18 +773,19 @@ void TextureCacheCommon::NotifyFramebuffer(u32 address, VirtualFramebuffer *fram
 		if (channel == FramebufferNotificationChannel::NOTIFY_FB_COLOR) {
 			// Color - no need to look in the mirrors.
 			for (auto it = cache_.lower_bound(cacheKey), end = cache_.upper_bound(cacheKeyEnd); it != end; ++it) {
-				// Just mark them all dirty somehow.
 				it->second->status |= TexCacheEntry::STATUS_FRAMEBUFFER_OVERLAP;
+				gpuStats.numTextureInvalidationsByFramebuffer++;
 			}
 		} else {
-			// Depth. Just look in the mirrors.
-			for (auto it = cache_.lower_bound(mirrorCacheKey), end = cache_.upper_bound(mirrorCacheKeyEnd); it != end; ++it) {
-				const u64 mirrorlessKey = it->first & ~0x0060000000000000ULL;
-				// Let's still make sure it's in the cache range.
-				if (mirrorlessKey >= cacheKey && mirrorlessKey <= cacheKeyEnd) {
-					// Just mark them all dirty somehow.
-					it->second->status |= TexCacheEntry::STATUS_FRAMEBUFFER_OVERLAP;
-				}
+			// Depth. Just look at the range, but in each mirror (0x04200000 and 0x04600000).
+			// Games don't use 0x04400000 as far as I know - it has no swizzle effect so kinda useless.
+			for (auto it = cache_.lower_bound(cacheKey | 0x200000), end = cache_.upper_bound(cacheKeyEnd | 0x200000); it != end; ++it) {
+				it->second->status |= TexCacheEntry::STATUS_FRAMEBUFFER_OVERLAP;
+				gpuStats.numTextureInvalidationsByFramebuffer++;
+			}
+			for (auto it = cache_.lower_bound(cacheKey | 0x600000), end = cache_.upper_bound(cacheKeyEnd | 0x600000); it != end; ++it) {
+				it->second->status |= TexCacheEntry::STATUS_FRAMEBUFFER_OVERLAP;
+				gpuStats.numTextureInvalidationsByFramebuffer++;
 			}
 		}
 		break;
@@ -933,8 +973,8 @@ void TextureCacheCommon::SetTextureFramebuffer(const AttachCandidate &candidate)
 			gstate_c.SetNeedShaderTexclamp(true);
 		}
 
-		nextTexture_ = nullptr;
 		nextFramebufferTexture_ = framebuffer;
+		nextTexture_ = nullptr;
 	} else {
 		if (framebuffer->fbo) {
 			framebuffer->fbo->Release();
@@ -942,6 +982,8 @@ void TextureCacheCommon::SetTextureFramebuffer(const AttachCandidate &candidate)
 		}
 		Unbind();
 		gstate_c.SetNeedShaderTexclamp(false);
+		nextFramebufferTexture_ = nullptr;
+		nextTexture_ = nullptr;
 	}
 
 	nextNeedsRehash_ = false;
@@ -1546,7 +1588,7 @@ void TextureCacheCommon::ReadIndexedTex(u8 *out, int outPitch, int level, const 
 
 void TextureCacheCommon::ApplyTexture() {
 	TexCacheEntry *entry = nextTexture_;
-	if (entry == nullptr) {
+	if (!entry) {
 		// Maybe we bound a framebuffer?
 		if (nextFramebufferTexture_) {
 			bool depth = Memory::IsDepthTexVRAMAddress(gstate.getTextureAddress(0));

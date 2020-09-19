@@ -347,6 +347,14 @@ VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(const Frame
 		vfb->fb_stride = params.fb_stride;
 		vfb->z_address = params.z_address;
 		vfb->z_stride = params.z_stride;
+
+		if (vfb->z_address == vfb->fb_address) {
+			// Probably indicates that the game doesn't care about Z for this VFB.
+			// Let's avoid matching it for Z copies.
+			vfb->z_address = 0;
+			vfb->z_stride = 0;
+		}
+
 		vfb->width = drawing_width;
 		vfb->height = drawing_height;
 		vfb->newWidth = drawing_width;
@@ -441,8 +449,8 @@ VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(const Frame
 
 void FramebufferManagerCommon::DestroyFramebuf(VirtualFramebuffer *v) {
 	// Notify the texture cache of both the color and depth buffers.
-	textureCache_->NotifyFramebuffer(v->fb_address, v, NOTIFY_FB_DESTROYED, NOTIFY_FB_COLOR);
-	textureCache_->NotifyFramebuffer(v->z_address, v, NOTIFY_FB_DESTROYED, NOTIFY_FB_DEPTH);
+	textureCache_->NotifyFramebuffer(v, NOTIFY_FB_DESTROYED, NOTIFY_FB_COLOR);
+	textureCache_->NotifyFramebuffer(v, NOTIFY_FB_DESTROYED, NOTIFY_FB_DEPTH);
 	if (v->fbo) {
 		v->fbo->Release();
 		v->fbo = nullptr;
@@ -461,6 +469,26 @@ void FramebufferManagerCommon::DestroyFramebuf(VirtualFramebuffer *v) {
 	delete v;
 }
 
+void FramebufferManagerCommon::BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst) {
+	bool matchingDepthBuffer = src->z_address == dst->z_address && src->z_stride != 0 && dst->z_stride != 0;
+	bool matchingSize = src->width == dst->width && src->height == dst->height;
+
+	// Note: we don't use CopyFramebufferImage here, because it would copy depth AND stencil.  See #9740.
+	if (matchingDepthBuffer && matchingSize) {
+		int w = std::min(src->renderWidth, dst->renderWidth);
+		int h = std::min(src->renderHeight, dst->renderHeight);
+		// Let's only do this if not clearing depth.
+		if (gstate_c.Supports(GPU_SUPPORTS_FRAMEBUFFER_BLIT)) {
+			draw_->BlitFramebuffer(src->fbo, 0, 0, w, h, dst->fbo, 0, 0, w, h, Draw::FB_DEPTH_BIT, Draw::FB_BLIT_NEAREST, "BlitFramebufferDepth");
+			RebindFramebuffer("BlitFramebufferDepth");
+		} else if (gstate_c.Supports(GPU_SUPPORTS_COPY_IMAGE)) {
+			draw_->CopyFramebufferImage(src->fbo, 0, 0, 0, 0, dst->fbo, 0, 0, 0, 0, w, h, 1, Draw::FB_DEPTH_BIT, "BlitFramebufferDepth");
+			RebindFramebuffer("BlitFramebufferDepth");
+		}
+		dst->last_frame_depth_updated = gpuStats.numFlips;
+	}
+}
+
 void FramebufferManagerCommon::NotifyRenderFramebufferCreated(VirtualFramebuffer *vfb) {
 	if (!useBufferedRendering_) {
 		// Let's ignore rendering to targets that have not (yet) been displayed.
@@ -469,8 +497,8 @@ void FramebufferManagerCommon::NotifyRenderFramebufferCreated(VirtualFramebuffer
 		DownloadFramebufferOnSwitch(currentRenderVfb_);
 	}
 
-	textureCache_->NotifyFramebuffer(vfb->fb_address, vfb, NOTIFY_FB_CREATED, NOTIFY_FB_COLOR);
-	textureCache_->NotifyFramebuffer(vfb->z_address, vfb, NOTIFY_FB_CREATED, NOTIFY_FB_DEPTH);
+	textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_CREATED, NOTIFY_FB_COLOR);
+	textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_CREATED, NOTIFY_FB_DEPTH);
 
 	// Ugly...
 	if (gstate_c.curRTWidth != vfb->width || gstate_c.curRTHeight != vfb->height) {
@@ -484,8 +512,8 @@ void FramebufferManagerCommon::NotifyRenderFramebufferCreated(VirtualFramebuffer
 
 void FramebufferManagerCommon::NotifyRenderFramebufferUpdated(VirtualFramebuffer *vfb, bool vfbFormatChanged) {
 	if (vfbFormatChanged) {
-		textureCache_->NotifyFramebuffer(vfb->fb_address, vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_COLOR);
-		textureCache_->NotifyFramebuffer(vfb->z_address, vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_DEPTH);
+		textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_COLOR);
+		textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_DEPTH);
 		if (vfb->drawnFormat != vfb->format) {
 			ReformatFramebufferFrom(vfb, vfb->drawnFormat);
 		}
@@ -553,8 +581,8 @@ void FramebufferManagerCommon::NotifyRenderFramebufferSwitched(VirtualFramebuffe
 	} else {
 		if (vfb->fbo) {
 			// This should only happen very briefly when toggling useBufferedRendering_.
-			textureCache_->NotifyFramebuffer(vfb->fb_address, vfb, NOTIFY_FB_DESTROYED, NOTIFY_FB_COLOR);
-			textureCache_->NotifyFramebuffer(vfb->z_address, vfb, NOTIFY_FB_DESTROYED, NOTIFY_FB_DEPTH);
+			textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_DESTROYED, NOTIFY_FB_COLOR);
+			textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_DESTROYED, NOTIFY_FB_DEPTH);
 			vfb->fbo->Release();
 			vfb->fbo = nullptr;
 		}
@@ -566,8 +594,8 @@ void FramebufferManagerCommon::NotifyRenderFramebufferSwitched(VirtualFramebuffe
 			gstate_c.skipDrawReason |= SKIPDRAW_NON_DISPLAYED_FB;
 		}
 	}
-	textureCache_->NotifyFramebuffer(vfb->fb_address, vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_COLOR);
-	textureCache_->NotifyFramebuffer(vfb->z_address, vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_DEPTH);
+	textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_COLOR);
+	textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_UPDATED, NOTIFY_FB_DEPTH);
 
 	// ugly... is all this needed?
 	if (gstate_c.curRTWidth != vfb->width || gstate_c.curRTHeight != vfb->height) {
@@ -1348,7 +1376,7 @@ VirtualFramebuffer *FramebufferManagerCommon::CreateRAMFramebuffer(uint32_t fbAd
 	SetColorUpdated(vfb, 0);
 	char name[64];
 	snprintf(name, sizeof(name), "%08x_color_RAM", vfb->fb_address);
-	textureCache_->NotifyFramebuffer(vfb->fb_address, vfb, NOTIFY_FB_CREATED, NOTIFY_FB_COLOR);
+	textureCache_->NotifyFramebuffer(vfb, NOTIFY_FB_CREATED, NOTIFY_FB_COLOR);
 	vfb->fbo = draw_->CreateFramebuffer({ vfb->renderWidth, vfb->renderHeight, 1, 1, true, (Draw::FBColorDepth)vfb->colorDepth, name });
 	vfbs_.push_back(vfb);
 
