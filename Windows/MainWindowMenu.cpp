@@ -47,10 +47,10 @@
 #include "Core/Core.h"
 
 extern bool g_TakeScreenshot;
+extern bool g_ShaderNameListChanged;
 
 namespace MainWindow {
 	extern HINSTANCE hInst;
-	static const int numCPUs = 1;  // what?
 	extern bool noFocusPause;
 	static W32Util::AsyncBrowseDialog *browseDialog;
 	static W32Util::AsyncBrowseDialog *browseImageDialog;
@@ -154,7 +154,7 @@ namespace MainWindow {
 		int item = ID_SHADERS_BASE + 1;
 
 		for (size_t i = 0; i < availableShaders.size(); i++)
-			CheckMenuItem(menu, item++, ((g_Config.sPostShaderName == availableShaders[i]) ? MF_CHECKED : MF_UNCHECKED));
+			CheckMenuItem(menu, item++, ((g_Config.vPostShaderNames[0] == availableShaders[i] && (g_Config.vPostShaderNames[0] == "Off" || g_Config.vPostShaderNames[1] == "Off")) ? MF_CHECKED : MF_UNCHECKED));
 	}
 
 	bool CreateShadersSubmenu(HMENU menu) {
@@ -188,7 +188,7 @@ namespace MainWindow {
 				continue;
 			int checkedStatus = MF_UNCHECKED;
 			availableShaders.push_back(i->section);
-			if (g_Config.sPostShaderName == i->section) {
+			if (g_Config.vPostShaderNames[0] == i->section && (g_Config.vPostShaderNames[0] == "Off" || g_Config.vPostShaderNames[1] == "Off")) {
 				checkedStatus = MF_CHECKED;
 			}
 
@@ -585,16 +585,16 @@ namespace MainWindow {
 				// Causes hang
 				//NativeMessageReceived("run", "");
 
-				if (disasmWindow[0])
-					SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
+				if (disasmWindow)
+					SendMessage(disasmWindow->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 			} else if (Core_IsStepping()) { // It is paused, then continue to run.
-				if (disasmWindow[0])
-					SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
+				if (disasmWindow)
+					SendMessage(disasmWindow->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 				else
 					Core_EnableStepping(false);
 			} else {
-				if (disasmWindow[0])
-					SendMessage(disasmWindow[0]->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
+				if (disasmWindow)
+					SendMessage(disasmWindow->GetDlgHandle(), WM_COMMAND, IDC_STOPGO, 0);
 				else
 					Core_EnableStepping(true);
 			}
@@ -853,11 +853,11 @@ namespace MainWindow {
 			if (W32Util::BrowseForFileName(true, hWnd, L"Load .ppmap", 0, L"Maps\0*.ppmap\0All files\0*.*\0\0", L"ppmap", fn)) {
 				g_symbolMap->LoadSymbolMap(fn.c_str());
 
-				if (disasmWindow[0])
-					disasmWindow[0]->NotifyMapLoaded();
+				if (disasmWindow)
+					disasmWindow->NotifyMapLoaded();
 
-				if (memoryWindow[0])
-					memoryWindow[0]->NotifyMapLoaded();
+				if (memoryWindow)
+					memoryWindow->NotifyMapLoaded();
 			}
 			break;
 
@@ -870,11 +870,11 @@ namespace MainWindow {
 			if (W32Util::BrowseForFileName(true, hWnd, L"Load .sym", 0, L"Symbols\0*.sym\0All files\0*.*\0\0", L"sym", fn)) {
 				g_symbolMap->LoadNocashSym(fn.c_str());
 
-				if (disasmWindow[0])
-					disasmWindow[0]->NotifyMapLoaded();
+				if (disasmWindow)
+					disasmWindow->NotifyMapLoaded();
 
-				if (memoryWindow[0])
-					memoryWindow[0]->NotifyMapLoaded();
+				if (memoryWindow)
+					memoryWindow->NotifyMapLoaded();
 			}
 			break;
 
@@ -886,18 +886,16 @@ namespace MainWindow {
 		case ID_DEBUG_RESETSYMBOLTABLE:
 			g_symbolMap->Clear();
 
-			for (int i = 0; i < numCPUs; i++)
-				if (disasmWindow[i])
-					disasmWindow[i]->NotifyMapLoaded();
+			if (disasmWindow)
+				disasmWindow->NotifyMapLoaded();
 
-			for (int i = 0; i < numCPUs; i++)
-				if (memoryWindow[i])
-					memoryWindow[i]->NotifyMapLoaded();
+			if (memoryWindow)
+				memoryWindow->NotifyMapLoaded();
 			break;
 
 		case ID_DEBUG_DISASSEMBLY:
-			if (disasmWindow[0])
-				disasmWindow[0]->Show(true);
+			if (disasmWindow)
+				disasmWindow->Show(true);
 			break;
 
 		case ID_DEBUG_GEDEBUGGER:
@@ -908,8 +906,8 @@ namespace MainWindow {
 			break;
 
 		case ID_DEBUG_MEMORYVIEW:
-			if (memoryWindow[0])
-				memoryWindow[0]->Show(true);
+			if (memoryWindow)
+				memoryWindow->Show(true);
 			break;
 
 		case ID_DEBUG_EXTRACTFILE:
@@ -1062,8 +1060,12 @@ namespace MainWindow {
 			// ID_SHADERS_BASE and an additional 1 off it.
 			u32 index = (wParam - ID_SHADERS_BASE - 1);
 			if (index < availableShaders.size()) {
-				g_Config.sPostShaderName = availableShaders[index];
-
+				g_Config.vPostShaderNames.clear();
+				if (availableShaders[index] != "Off")
+					g_Config.vPostShaderNames.push_back(availableShaders[index]);
+				g_Config.vPostShaderNames.push_back("Off");
+				g_ShaderNameListChanged = true;
+				g_Config.bShaderChainRequires60FPS = PostShaderChainRequires60FPS(GetFullPostShadersChain(g_Config.vPostShaderNames));
 				NativeMessageReceived("gpu_resized", "");
 				break;
 			}

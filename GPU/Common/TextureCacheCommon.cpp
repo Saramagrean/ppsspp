@@ -506,7 +506,10 @@ TexCacheEntry *TextureCacheCommon::SetTexture() {
 		}
 
 		entry = entryNew;
-		if (g_Config.bTextureBackoffCache) {
+		if (Memory::IsKernelAddress(texaddr)) {
+			// It's the builtin font texture.
+			entry->status = TexCacheEntry::STATUS_RELIABLE;
+		} else if (g_Config.bTextureBackoffCache) {
 			entry->status = TexCacheEntry::STATUS_HASHING;
 		} else {
 			entry->status = TexCacheEntry::STATUS_UNRELIABLE;
@@ -568,10 +571,9 @@ std::vector<AttachCandidate> TextureCacheCommon::GetFramebufferCandidates(const 
 
 	FramebufferNotificationChannel channel = Memory::IsDepthTexVRAMAddress(entry.addr) ? FramebufferNotificationChannel::NOTIFY_FB_DEPTH : FramebufferNotificationChannel::NOTIFY_FB_COLOR;
 
-	auto framebuffers = framebufferManager_->Framebuffers();
+	const std::vector<VirtualFramebuffer *> &framebuffers = framebufferManager_->Framebuffers();
 
-	for (size_t i = 0, n = framebuffers.size(); i < n; ++i) {
-		auto framebuffer = framebuffers[i];
+	for (VirtualFramebuffer *framebuffer : framebuffers) {
 		FramebufferMatchInfo match = MatchFramebuffer(entry, framebuffer, texAddrOffset, channel);
 		switch (match.match) {
 		case FramebufferMatch::VALID:
@@ -707,7 +709,8 @@ void TextureCacheCommon::HandleTextureChange(TexCacheEntry *const entry, const c
 		ReleaseTexture(entry, true);
 		entry->status &= ~TexCacheEntry::STATUS_IS_SCALED;
 	}
-	// Clear the reliable bit if set.
+
+	// Mark as hashing, if marked as reliable.
 	if (entry->GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
 		entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
 	}
@@ -723,7 +726,6 @@ void TextureCacheCommon::HandleTextureChange(TexCacheEntry *const entry, const c
 		}
 	}
 
-	entry->status |= TexCacheEntry::STATUS_UNRELIABLE;
 	if (entry->numFrames < TEXCACHE_FRAME_CHANGE_FREQUENT) {
 		if (entry->status & TexCacheEntry::STATUS_FREE_CHANGE) {
 			entry->status &= ~TexCacheEntry::STATUS_FREE_CHANGE;
@@ -1073,9 +1075,8 @@ void TextureCacheCommon::LoadClut(u32 clutAddr, u32 loadBytes) {
 			static const u32 MAX_CLUT_OFFSET = 4096;
 
 			clutRenderOffset_ = MAX_CLUT_OFFSET;
-			auto framebuffers = framebufferManager_->Framebuffers();
-			for (size_t i = 0, n = framebuffers.size(); i < n; ++i) {
-				auto framebuffer = framebuffers[i];
+			const std::vector<VirtualFramebuffer *> &framebuffers = framebufferManager_->Framebuffers();
+			for (VirtualFramebuffer *framebuffer : framebuffers) {
 				const u32 fb_address = framebuffer->fb_address & 0x3FFFFFFF;
 				const u32 bpp = framebuffer->drawnFormat == GE_FORMAT_8888 ? 4 : 2;
 				u32 offset = clutFramebufAddr - fb_address;
@@ -1752,6 +1753,9 @@ bool TextureCacheCommon::CheckFullHash(TexCacheEntry *entry, bool &doDelete) {
 
 void TextureCacheCommon::Invalidate(u32 addr, int size, GPUInvalidationType type) {
 	// They could invalidate inside the texture, let's just give a bit of leeway.
+	// TODO: Keep track of the largest texture size in bytes, and use that instead of this
+	// humongous unrealistic value.
+
 	const int LARGEST_TEXTURE_SIZE = 512 * 512 * 4;
 
 	addr &= 0x3FFFFFFF;
@@ -1784,7 +1788,8 @@ void TextureCacheCommon::Invalidate(u32 addr, int size, GPUInvalidationType type
 		u32 texAddr = iter->second->addr;
 		u32 texEnd = iter->second->addr + iter->second->sizeInRAM;
 
-		if (texAddr < addr_end && addr < texEnd) {
+		// Quick check for overlap. Yes the check is right.
+		if (addr < texEnd && addr_end > texAddr) {
 			if (iter->second->GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
 				iter->second->SetHashStatus(TexCacheEntry::STATUS_HASHING);
 			}

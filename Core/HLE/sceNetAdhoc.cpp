@@ -1005,11 +1005,12 @@ int sceNetAdhocctlGetState(u32 ptrToStatus) {
 	if (!Memory::IsValidAddress(ptrToStatus))
 		return ERROR_NET_ADHOCCTL_INVALID_ARG;
 
-	// Return Thread Status
-	Memory::Write_U32(NetAdhocctl_GetState(), ptrToStatus);
-	// Return Success
-	return hleLogSuccessVerboseI(SCENET, 0);
+	int state = NetAdhocctl_GetState();
+	// Output Adhocctl State
+	Memory::Write_U32(state, ptrToStatus);
 
+	// Return Success
+	return hleLogSuccessVerboseI(SCENET, 0, "state = %d", state);
 }
 
 /**
@@ -1051,9 +1052,12 @@ static int sceNetAdhocPdpCreate(const char *mac, int port, int bufferSize, u32 u
 				int usocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 				// Valid Socket produced
 				if (usocket != INVALID_SOCKET) {
-					// Change socket buffer size when necessary
-					if (getSockBufferSize(usocket, SO_SNDBUF) < bufferSize) setSockBufferSize(usocket, SO_SNDBUF, bufferSize);
-					if (getSockBufferSize(usocket, SO_RCVBUF) < bufferSize) setSockBufferSize(usocket, SO_RCVBUF, bufferSize);
+					// Change socket buffer size.
+					int pdpbufsize = std::max(bufferSize, PSP_ADHOC_PDP_MFS); //bufferSize*10;
+					// Send Buffer should be smaller than Recv Buffer to prevent faster device from flooding slower device too much.
+					setSockBufferSize(usocket, SO_SNDBUF, pdpbufsize);
+					// Recv Buffer should be equal or larger than Send Buffer. Using larger Recv Buffer might helped reduces dropped packets during a slowdown, but too large may cause slow performance on Warriors Orochi 2.
+					setSockBufferSize(usocket, SO_RCVBUF, pdpbufsize*10);
 
 					// Enable KeepAlive
 					setSockKeepAlive(usocket, true);
@@ -1106,7 +1110,6 @@ static int sceNetAdhocPdpCreate(const char *mac, int port, int bufferSize, u32 u
 								internal->data.pdp.id = usocket;
 								internal->data.pdp.laddr = *saddr;
 								internal->data.pdp.lport = port; //getLocalPort(usocket) - portOffset;
-								internal->data.pdp.rcv_sb_cc = bufferSize;
 
 								// Link Socket to Translator ID
 								adhocSockets[i] = internal;
@@ -1238,8 +1241,6 @@ static int sceNetAdhocPdpSend(int id, const char *mac, u32 port, void *data, int
 							// Apply Send Timeout Settings to Socket
 							if (timeout > 0) 
 								setSockTimeout(pdpsocket.id, SO_SNDTIMEO, timeout);
-
-							int maxlen = getSockMaxSize(pdpsocket.id);
 
 							// Single Target
 							if (!isBroadcastMAC(daddr)) {
@@ -2063,6 +2064,11 @@ u32 NetAdhocctl_Disconnect() {
 					AdhocctlRequest req = { OPCODE_DISCONNECT, {0} };
 					WaitAdhocctlState(req, ADHOCCTL_STATE_DISCONNECTED, us, "adhocctl disconnect");
 				}
+				else {
+					// Set Disconnected State
+					//adhocctlState = ADHOCCTL_STATE_DISCONNECTED;
+					return ERROR_NET_ADHOCCTL_BUSY;
+				}
 			}
 
 			// Free Network Lock
@@ -2094,31 +2100,32 @@ u32 NetAdhocctl_Disconnect() {
 		//hleCheckCurrentCallbacks();
 
 		// Return Success, some games might ignore returned value and always treat it as success, otherwise repeatedly calling this function
-		if (adhocctlState == ADHOCCTL_STATE_DISCONNECTED || iResult != SOCKET_ERROR)
-			hleDelayResult(0, "give time to init/cleanup", us);
-
 		return 0;
 	}
 
 	// Library uninitialized
-	return 0; //ERROR_NET_ADHOC_NOT_INITIALIZED; // Wipeout Pulse will repeatedly calling this function if returned value is ERROR_NET_ADHOC_NOT_INITIALIZED
+	return ERROR_NET_ADHOCCTL_NOT_INITIALIZED;
 }
 
 static u32 sceNetAdhocctlDisconnect() {
 	// WLAN might be disabled in the middle of successfull multiplayer, but we still need to cleanup right?
 	char grpName[9] = { 0 };
 	memcpy(grpName, parameter.group_name.data, ADHOCCTL_GROUPNAME_LEN); // Copied to null-terminated var to prevent unexpected behaviour on Logs
-	INFO_LOG(SCENET, "sceNetAdhocctlDisconnect() at %08x [group=%s]", currentMIPS->pc, grpName);
+	int ret = NetAdhocctl_Disconnect();
+	INFO_LOG(SCENET, "%08x=sceNetAdhocctlDisconnect() at %08x [group=%s]", ret, currentMIPS->pc, grpName);
 
-	return NetAdhocctl_Disconnect();
+	return ret;
 }
 
 static u32 sceNetAdhocctlDelHandler(u32 handlerID) {
+	if (!netAdhocctlInited)
+		return hleLogError(SCENET, ERROR_NET_ADHOCCTL_NOT_INITIALIZED, "adhocctl not initialized");
+
 	if (adhocctlHandlers.find(handlerID) != adhocctlHandlers.end()) {
 		adhocctlHandlers.erase(handlerID);
-		WARN_LOG(SCENET, "UNTESTED sceNetAdhocctlDelHandler(%d)", handlerID);
+		INFO_LOG(SCENET, "sceNetAdhocctlDelHandler(%d)", handlerID);
 	} else {
-		ERROR_LOG(SCENET, "UNTESTED sceNetAdhocctlDelHandler(%d): Invalid Handler ID", handlerID);
+		WARN_LOG(SCENET, "sceNetAdhocctlDelHandler(%d): Invalid Handler ID", handlerID);
 	}
 
 	return 0;
@@ -2263,7 +2270,7 @@ int sceNetAdhocctlGetPeerInfo(const char *mac, int size, u32 peerInfoAddr) {
 			SceNetAdhocctlNickname nickname;
 
 			truncate_cpy((char*)&nickname.data, ADHOCCTL_NICKNAME_LEN, g_Config.sNickName.c_str());
-			//buf->next = 0;
+			buf->next = 0;
 			buf->nickname = nickname;
 			buf->nickname.data[ADHOCCTL_NICKNAME_LEN - 1] = 0; // last char need to be null-terminated char
 			buf->mac_addr = *maddr;
@@ -2603,7 +2610,7 @@ int sceNetAdhocTerm() {
 }
 
 static int sceNetAdhocGetPdpStat(u32 structSize, u32 structAddr) {
-	VERBOSE_LOG(SCENET, "UNTESTED sceNetAdhocGetPdpStat(%08x, %08x) at %08x", structSize, structAddr, currentMIPS->pc);
+	VERBOSE_LOG(SCENET, "sceNetAdhocGetPdpStat(%08x, %08x) at %08x", structSize, structAddr, currentMIPS->pc);
 	
 	// Library is initialized
 	if (netAdhocInited)
@@ -2621,6 +2628,7 @@ static int sceNetAdhocGetPdpStat(u32 structSize, u32 structAddr) {
 		{
 			// Return Required Size
 			*buflen = sizeof(SceNetAdhocPdpStat) * socketcount;
+			VERBOSE_LOG(SCENET, "PDP Socket Count: %d", socketcount);
 
 			// Success
 			return 0;
@@ -2648,12 +2656,21 @@ static int sceNetAdhocGetPdpStat(u32 structSize, u32 structAddr) {
 					// Fix Client View Socket ID
 					buf[i].id = j + 1;
 
+					// Set available bytes to be received. With FIOREAD There might be lingering 1 byte in recv buffer when remote peer's socket got closed
+					u32 avail = 0;
+					if (IsSocketReady(sock->data.pdp.id, true, false) > 0) {
+						avail = getAvailToRecv(sock->data.pdp.id);
+					}
+					buf[i].rcv_sb_cc = avail;
+
 					// Write End of List Reference
 					buf[i].next = 0;
 
 					// Link Previous Element
 					if (i > 0) 
 						buf[i - 1].next = structAddr + (i * sizeof(SceNetAdhocPdpStat));
+
+					VERBOSE_LOG(SCENET, "PDP Socket Id: %d, LPort: %d, RecvSbCC: %d", buf[i].id, buf[i].lport, buf[i].rcv_sb_cc);
 
 					// Increment Counter
 					i++;
@@ -2700,6 +2717,7 @@ static int sceNetAdhocGetPtpStat(u32 structSize, u32 structAddr) {
 		if (buflen != NULL && buf == NULL) {
 			// Return Required Size
 			*buflen = sizeof(SceNetAdhocPtpStat) * socketcount;
+			VERBOSE_LOG(SCENET, "PTP Socket Count: %d", socketcount);
 			
 			// Success
 			return 0;
@@ -2724,6 +2742,9 @@ static int sceNetAdhocGetPtpStat(u32 structSize, u32 structAddr) {
 					
 					// Fix Client View Socket ID
 					buf[i].id = j + 1;
+
+					// Set available bytes to be received
+					buf[i].rcv_sb_cc = getAvailToRecv(sock->data.ptp.id);
 					
 					// Write End of List Reference
 					buf[i].next = 0;
@@ -2731,6 +2752,8 @@ static int sceNetAdhocGetPtpStat(u32 structSize, u32 structAddr) {
 					// Link previous Element to this one
 					if (i > 0)
 						buf[i - 1].next = structAddr + (i * sizeof(SceNetAdhocPtpStat));
+
+					VERBOSE_LOG(SCENET, "PTP Socket Id: %d, LPort: %d, RecvSbCC: %d", buf[i].id, buf[i].lport, buf[i].rcv_sb_cc);
 					
 					// Increment Counter
 					i++;
@@ -2795,9 +2818,10 @@ static int sceNetAdhocPtpOpen(const char *srcmac, int sport, const char *dstmac,
 
 				// Valid Socket produced
 				if (tcpsocket > 0) {
-					// Change socket buffer size when necessary
-					if (getSockBufferSize(tcpsocket, SO_SNDBUF) < bufsize) setSockBufferSize(tcpsocket, SO_SNDBUF, bufsize);
-					if (getSockBufferSize(tcpsocket, SO_RCVBUF) < bufsize) setSockBufferSize(tcpsocket, SO_RCVBUF, bufsize);
+					// Change socket buffer size to be consistent on all platforms.
+					int ptpbufsize = std::max(bufsize, PSP_ADHOC_PTP_MSS);
+					setSockBufferSize(tcpsocket, SO_SNDBUF, ptpbufsize);
+					setSockBufferSize(tcpsocket, SO_RCVBUF, ptpbufsize*10);
 
 					// Enable KeepAlive
 					setSockKeepAlive(tcpsocket, true, rexmt_int / 1000000L, rexmt_cnt);
@@ -2860,9 +2884,6 @@ static int sceNetAdhocPtpOpen(const char *srcmac, int sport, const char *dstmac,
 								internal->data.ptp.paddr = *daddr;
 								internal->data.ptp.lport = sport;
 								internal->data.ptp.pport = dport;
-
-								// Set Buffer Size
-								internal->data.ptp.rcv_sb_cc = bufsize;
 
 								// Link PTP Socket
 								adhocSockets[i] = internal;
@@ -2958,11 +2979,9 @@ int AcceptPtpSocket(int ptpId, int newsocket, sockaddr_in& peeraddr, SceNetEther
 					// Copy Socket Descriptor to Structure
 					internal->data.ptp.id = newsocket;
 
-					// Set Buffer Size
-					if (getSockBufferSize(newsocket, SO_RCVBUF) < ptpsocket.rcv_sb_cc) setSockBufferSize(newsocket, SO_RCVBUF, ptpsocket.rcv_sb_cc);
-					if (getSockBufferSize(newsocket, SO_SNDBUF) < ptpsocket.snd_sb_cc) setSockBufferSize(newsocket, SO_SNDBUF, ptpsocket.snd_sb_cc);
-					internal->data.ptp.rcv_sb_cc = ptpsocket.rcv_sb_cc;
-					internal->data.ptp.snd_sb_cc = ptpsocket.snd_sb_cc;
+					// Set Default Buffer Size
+					setSockBufferSize(newsocket, SO_SNDBUF, PSP_ADHOC_PTP_MSS);
+					setSockBufferSize(newsocket, SO_RCVBUF, PSP_ADHOC_PTP_MSS*10);
 
 					// Copy Local Address Data to Structure
 					getLocalMac(&internal->data.ptp.laddr);
@@ -3305,9 +3324,10 @@ static int sceNetAdhocPtpListen(const char *srcmac, int sport, int bufsize, int 
 
 				// Valid Socket produced
 				if (tcpsocket > 0) {
-					// Change socket buffer size when necessary
-					if (getSockBufferSize(tcpsocket, SO_SNDBUF) < bufsize) setSockBufferSize(tcpsocket, SO_SNDBUF, bufsize);
-					if (getSockBufferSize(tcpsocket, SO_RCVBUF) < bufsize) setSockBufferSize(tcpsocket, SO_RCVBUF, bufsize);
+					// Change socket buffer size to be consistent on all platforms.
+					int ptpbufsize = std::max(bufsize, PSP_ADHOC_PTP_MSS);
+					setSockBufferSize(tcpsocket, SO_SNDBUF, ptpbufsize);
+					setSockBufferSize(tcpsocket, SO_RCVBUF, ptpbufsize*10);
 
 					// Enable KeepAlive
 					setSockKeepAlive(tcpsocket, true, rexmt_int / 1000000L, rexmt_cnt);
@@ -3372,9 +3392,6 @@ static int sceNetAdhocPtpListen(const char *srcmac, int sport, int bufsize, int 
 
 									// Flag Socket as Listener
 									internal->data.ptp.state = ADHOC_PTP_STATE_LISTEN;
-
-									// Set Buffer Size
-									internal->data.ptp.rcv_sb_cc = bufsize;
 
 									// Link PTP Socket
 									adhocSockets[i] = internal;
