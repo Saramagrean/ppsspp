@@ -928,7 +928,6 @@ u32 GPUCommon::Break(int mode) {
 
 void GPUCommon::NotifySteppingEnter() {
 	if (coreCollectDebugStats) {
-		time_update();
 		timeSteppingStarted_ = time_now_d();
 	}
 }
@@ -937,7 +936,6 @@ void GPUCommon::NotifySteppingExit() {
 		if (timeSteppingStarted_ <= 0.0) {
 			ERROR_LOG(G3D, "Mismatched stepping enter/exit.");
 		}
-		time_update();
 		timeSpentStepping_ += time_now_d() - timeSteppingStarted_;
 		timeSteppingStarted_ = 0.0;
 	}
@@ -947,7 +945,6 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	// Initialized to avoid a race condition with bShowDebugStats changing.
 	double start = 0.0;
 	if (coreCollectDebugStats) {
-		time_update();
 		start = time_now_d();
 	}
 
@@ -1012,7 +1009,6 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	list.offsetAddr = gstate_c.offsetAddr;
 
 	if (coreCollectDebugStats) {
-		time_update();
 		double total = time_now_d() - start - timeSpentStepping_;
 		hleSetSteppingTime(timeSpentStepping_);
 		timeSpentStepping_ = 0.0;
@@ -1584,7 +1580,7 @@ void GPUCommon::Execute_Prim(u32 op, u32 diff) {
 	}
 
 	if (!Memory::IsValidAddress(gstate_c.vertexAddr)) {
-		ERROR_LOG_REPORT(G3D, "Bad vertex address %08x!", gstate_c.vertexAddr);
+		ERROR_LOG(G3D, "Bad vertex address %08x!", gstate_c.vertexAddr);
 		return;
 	}
 
@@ -1594,17 +1590,11 @@ void GPUCommon::Execute_Prim(u32 op, u32 diff) {
 	if ((vertexType & GE_VTYPE_IDX_MASK) != GE_VTYPE_IDX_NONE) {
 		u32 indexAddr = gstate_c.indexAddr;
 		if (!Memory::IsValidAddress(indexAddr)) {
-			ERROR_LOG_REPORT(G3D, "Bad index address %08x!", indexAddr);
+			ERROR_LOG(G3D, "Bad index address %08x!", indexAddr);
 			return;
 		}
 		inds = Memory::GetPointerUnchecked(indexAddr);
 	}
-
-#ifndef MOBILE_DEVICE
-	if (prim > GE_PRIM_RECTANGLES) {
-		ERROR_LOG_REPORT_ONCE(reportPrim, G3D, "Unexpected prim type: %d", prim);
-	}
-#endif
 
 	if (gstate_c.dirty & DIRTY_VERTEXSHADER_STATE) {
 		vertexCost_ = EstimatePerVertexCost();
@@ -1631,9 +1621,8 @@ void GPUCommon::Execute_Prim(u32 op, u32 diff) {
 
 	// Optimized submission of sequences of PRIM. Allows us to avoid going through all the mess
 	// above for each one. This can be expanded to support additional games that intersperse
-	// PRIM commands with other commands. A special case that might be interesting is that game
-	// that changes culling mode between each prim, we could just change the triangle winding
-	// right here to still be able to join draw calls.
+	// PRIM commands with other commands. A special case is Earth Defence Force 2 that changes culling mode
+	// between each prim, we just change the triangle winding right here to still be able to join draw calls.
 
 	uint32_t vtypeCheckMask = ~GE_VTYPE_WEIGHTCOUNT_MASK;
 	if (!g_Config.bSoftwareSkinning)
@@ -1680,11 +1669,11 @@ void GPUCommon::Execute_Prim(u32 op, u32 diff) {
 			break;
 		}
 		case GE_CMD_VADDR:
-			gstate.cmdmem[data >> 24] = data;
+			gstate.cmdmem[GE_CMD_VADDR] = data;
 			gstate_c.vertexAddr = gstate_c.getRelativeAddress(data & 0x00FFFFFF);
 			break;
 		case GE_CMD_IADDR:
-			gstate.cmdmem[data >> 24] = data;
+			gstate.cmdmem[GE_CMD_IADDR] = data;
 			gstate_c.indexAddr = gstate_c.getRelativeAddress(data & 0x00FFFFFF);
 			break;
 		case GE_CMD_OFFSETADDR:
@@ -2351,7 +2340,7 @@ void GPUCommon::FastLoadBoneMatrix(u32 target) {
 	const int num = gstate.boneMatrixNumber & 0x7F;
 	const int mtxNum = num / 12;
 	uint32_t uniformsToDirty = DIRTY_BONEMATRIX0 << mtxNum;
-	if ((num - 12 * mtxNum) != 0) {
+	if (num != 12 * mtxNum) {
 		uniformsToDirty |= DIRTY_BONEMATRIX0 << ((mtxNum + 1) & 7);
 	}
 

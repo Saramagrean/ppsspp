@@ -282,12 +282,19 @@ std::string System_GetProperty(SystemProperty prop) {
 		// Set c and c++ strings back to POSIX
 		std::locale::global(std::locale("POSIX"));
 		if (!locale.empty()) {
+			// Technically, this is an opaque string, but try to find the locale code.
+			size_t messagesPos = locale.find("LC_MESSAGES=");
+			if (messagesPos != std::string::npos) {
+				messagesPos += strlen("LC_MESSAGES=");
+				size_t semi = locale.find(';', messagesPos);
+				locale = locale.substr(messagesPos, semi - messagesPos);
+			}
+
 			if (locale.find("_", 0) != std::string::npos) {
 				if (locale.find(".", 0) != std::string::npos) {
 					return locale.substr(0, locale.find(".",0));
-				} else {
-					return locale;
 				}
+				return locale;
 			}
 		}
 		return "en_US";
@@ -1122,7 +1129,6 @@ int main(int argc, char *argv[]) {
 		ToggleFullScreenIfFlagSet(window);
 
 		// Simple throttling to not burn the GPU in the menu.
-		time_update();
 		if (GetUIState() != UISTATE_INGAME || !PSP_IsInited() || renderThreadPaused) {
 			double diffTime = time_now_d() - startTime;
 			int sleepTime = (int)(1000.0 / 60.0) - (int)(diffTime * 1000.0);
@@ -1130,7 +1136,6 @@ int main(int argc, char *argv[]) {
 				sleep_ms(sleepTime);
 		}
 
-		time_update();
 		framecount++;
 	}
 
