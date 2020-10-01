@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "ppsspp_config.h"
 #include "CommonWindows.h"
 
@@ -201,7 +200,7 @@ GenericListControl::GenericListControl(HWND hwnd, const GenericListViewDef& def)
 
 	int totalListSize = rect.right-rect.left;
 	for (int i = 0; i < columnCount; i++) {
-		lvc.cx = columns[i].size * totalListSize;
+		lvc.cx = (int)(columns[i].size * totalListSize);
 		lvc.pszText = (LPTSTR)columns[i].name;
 
 		if (columns[i].flags & GLVC_CENTERED)
