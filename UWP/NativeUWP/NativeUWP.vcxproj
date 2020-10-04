@@ -379,11 +379,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\ext\native\base\colorutil.h" />
     <ClInclude Include="..\..\ext\native\base\display.h" />
     <ClInclude Include="..\..\ext\native\base\NativeApp.h" />
-    <ClInclude Include="..\..\ext\native\data\base64.h" />
-    <ClInclude Include="..\..\ext\native\data\compression.h" />
     <ClInclude Include="..\..\ext\native\file\chunk_file.h" />
     <ClInclude Include="..\..\ext\native\file\fd_util.h" />
     <ClInclude Include="..\..\ext\native\file\file_util.h" />
@@ -399,12 +396,8 @@
     <ClInclude Include="..\..\ext\native\gfx_es2\draw_buffer.h" />
     <ClInclude Include="..\..\ext\native\gfx_es2\draw_text.h" />
     <ClInclude Include="..\..\ext\native\gfx_es2\gpu_features.h" />
-    <ClInclude Include="..\..\ext\native\i18n\i18n.h" />
     <ClInclude Include="..\..\ext\native\image\png_load.h" />
     <ClInclude Include="..\..\ext\native\image\zim_load.h" />
-    <ClInclude Include="..\..\ext\native\input\gesture_detector.h" />
-    <ClInclude Include="..\..\ext\native\input\input_state.h" />
-    <ClInclude Include="..\..\ext\native\input\keycodes.h" />
     <ClInclude Include="..\..\ext\native\math\curves.h" />
     <ClInclude Include="..\..\ext\native\math\dataconv.h" />
     <ClInclude Include="..\..\ext\native\math\expression_parser.h" />
@@ -423,10 +416,6 @@
     <ClInclude Include="..\..\ext\native\net\url.h" />
     <ClInclude Include="..\..\ext\native\net\websocket_server.h" />
     <ClInclude Include="..\..\ext\native\thin3d\thin3d.h" />
-    <ClInclude Include="..\..\ext\native\thread\executor.h" />
-    <ClInclude Include="..\..\ext\native\thread\prioritizedworkqueue.h" />
-    <ClInclude Include="..\..\ext\native\thread\threadpool.h" />
-    <ClInclude Include="..\..\ext\native\thread\threadutil.h" />
     <ClInclude Include="..\..\ext\native\ui\root.h" />
     <ClInclude Include="..\..\ext\native\ui\screen.h" />
     <ClInclude Include="..\..\ext\native\ui\ui.h" />
@@ -435,22 +424,11 @@
     <ClInclude Include="..\..\ext\native\ui\ui_tween.h" />
     <ClInclude Include="..\..\ext\native\ui\view.h" />
     <ClInclude Include="..\..\ext\native\ui\viewgroup.h" />
-    <ClInclude Include="..\..\ext\native\util\const_map.h" />
-    <ClInclude Include="..\..\ext\native\util\hash\hash.h" />
-    <ClInclude Include="..\..\ext\native\util\random\rng.h" />
-    <ClInclude Include="..\..\ext\native\util\text\parsers.h" />
-    <ClInclude Include="..\..\ext\native\util\text\shiftjis.h" />
-    <ClInclude Include="..\..\ext\native\util\text\utf16.h" />
-    <ClInclude Include="..\..\ext\native\util\text\utf8.h" />
-    <ClInclude Include="..\..\ext\native\util\text\wrap_text.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\ext\native\base\colorutil.cpp" />
     <ClCompile Include="..\..\ext\native\base\display.cpp" />
-    <ClCompile Include="..\..\ext\native\data\base64.cpp" />
-    <ClCompile Include="..\..\ext\native\data\compression.cpp" />
     <ClCompile Include="..\..\ext\native\file\chunk_file.cpp" />
     <ClCompile Include="..\..\ext\native\file\fd_util.cpp" />
     <ClCompile Include="..\..\ext\native\file\file_util.cpp" />
@@ -465,11 +443,8 @@
     <ClCompile Include="..\..\ext\native\gfx_es2\draw_buffer.cpp" />
     <ClCompile Include="..\..\ext\native\gfx_es2\draw_text.cpp" />
     <ClCompile Include="..\..\ext\native\gfx_es2\gpu_features.cpp" />
-    <ClCompile Include="..\..\ext\native\i18n\i18n.cpp" />
     <ClCompile Include="..\..\ext\native\image\png_load.cpp" />
     <ClCompile Include="..\..\ext\native\image\zim_load.cpp" />
-    <ClCompile Include="..\..\ext\native\input\gesture_detector.cpp" />
-    <ClCompile Include="..\..\ext\native\input\input_state.cpp" />
     <ClCompile Include="..\..\ext\native\math\curves.cpp" />
     <ClCompile Include="..\..\ext\native\math\dataconv.cpp" />
     <ClCompile Include="..\..\ext\native\math\expression_parser.cpp" />
@@ -599,10 +574,6 @@
     <ClCompile Include="..\..\ext\native\net\websocket_server.cpp" />
     <ClCompile Include="..\..\ext\native\thin3d\thin3d.cpp" />
     <ClCompile Include="..\..\ext\native\thin3d\thin3d_d3d11.cpp" />
-    <ClCompile Include="..\..\ext\native\thread\executor.cpp" />
-    <ClCompile Include="..\..\ext\native\thread\prioritizedworkqueue.cpp" />
-    <ClCompile Include="..\..\ext\native\thread\threadpool.cpp" />
-    <ClCompile Include="..\..\ext\native\thread\threadutil.cpp" />
     <ClCompile Include="..\..\ext\native\ui\root.cpp" />
     <ClCompile Include="..\..\ext\native\ui\screen.cpp" />
     <ClCompile Include="..\..\ext\native\ui\ui.cpp" />
@@ -611,10 +582,6 @@
     <ClCompile Include="..\..\ext\native\ui\ui_tween.cpp" />
     <ClCompile Include="..\..\ext\native\ui\view.cpp" />
     <ClCompile Include="..\..\ext\native\ui\viewgroup.cpp" />
-    <ClCompile Include="..\..\ext\native\util\hash\hash.cpp" />
-    <ClCompile Include="..\..\ext\native\util\text\parsers.cpp" />
-    <ClCompile Include="..\..\ext\native\util\text\utf8.cpp" />
-    <ClCompile Include="..\..\ext\native\util\text\wrap_text.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>

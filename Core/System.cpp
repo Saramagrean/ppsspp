@@ -34,8 +34,8 @@
 
 #include "base/NativeApp.h"
 #include "math/math_util.h"
-#include "thread/threadutil.h"
-#include "util/text/utf8.h"
+#include "Common/Thread/ThreadUtil.h"
+#include "Common/Data/Encoding/Utf8.h"
 
 #include "Common/FileUtil.h"
 #include "Common/TimeUtil.h"

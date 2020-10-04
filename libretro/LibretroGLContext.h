@@ -9,8 +9,6 @@ public:
 	LibretroGLContext()
 #ifdef USING_GLES2
 		: LibretroHWRenderContext(RETRO_HW_CONTEXT_OPENGLES2)
-#elif defined(HAVE_OPENGL_CORE)
-		: LibretroHWRenderContext(RETRO_HW_CONTEXT_OPENGL_CORE, 3, 1)
 #else
 		: LibretroHWRenderContext(RETRO_HW_CONTEXT_OPENGL)
 #endif

@@ -3,9 +3,9 @@
 #include <thread>
 
 #include "base/NativeApp.h"
-#include "i18n/i18n.h"
-#include "input/input_state.h"
-#include "util/text/utf8.h"
+#include "Common/Data/Text/I18n.h"
+#include "Common/Input/InputState.h"
+#include "Common/Data/Encoding/Utf8.h"
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -23,7 +23,7 @@
 #include "Core/System.h"
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
-#include "thread/threadutil.h"
+#include "Common/Thread/ThreadUtil.h"
 
 enum class EmuThreadState {
 	DISABLED,

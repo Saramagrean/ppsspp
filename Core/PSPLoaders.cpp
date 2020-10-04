@@ -18,8 +18,8 @@
 #include <thread>
 
 #include "file/file_util.h"
-#include "util/text/utf8.h"
-#include "thread/threadutil.h"
+#include "Common/Data/Encoding/Utf8.h"
+#include "Common/Thread/ThreadUtil.h"
 
 #include "Common/FileUtil.h"
 #include "Common/StringUtils.h"

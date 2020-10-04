@@ -24,11 +24,11 @@
 #include "CommonWindows.h"
 #endif
 
-#include "base/NativeApp.h"
-#include "file/ini_file.h"
-#include "input/input_state.h"
 #include "ppsspp_config.h"
 
+#include "base/NativeApp.h"
+#include "file/ini_file.h"
+#include "Common/Input/InputState.h"
 #include "Common/Log.h"
 #include "Common/KeyMap.h"
 #include "Common/StringUtils.h"

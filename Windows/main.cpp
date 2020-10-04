@@ -35,10 +35,10 @@
 #include "base/NativeApp.h"
 #include "file/vfs.h"
 #include "file/zip_read.h"
-#include "i18n/i18n.h"
+#include "Common/Data/Text/I18n.h"
 #include "profiler/profiler.h"
-#include "thread/threadutil.h"
-#include "util/text/utf8.h"
+#include "Common/Thread/ThreadUtil.h"
+#include "Common/Data/Encoding/Utf8.h"
 #include "net/resolve.h"
 
 #include "Core/Config.h"

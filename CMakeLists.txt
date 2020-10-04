@@ -433,6 +433,40 @@ add_library(Common STATIC
 	Common/Crypto/sha1.h
 	Common/Crypto/sha256.cpp
 	Common/Crypto/sha256.h
+	Common/Data/Collections/ConstMap.h
+	Common/Data/Collections/TinySet.h
+	Common/Data/Color/RGBAUtil.cpp
+	Common/Data/Color/RGBAUtil.h
+	Common/Data/Encoding/Base64.cpp
+	Common/Data/Encoding/Base64.h
+	Common/Data/Encoding/Compression.cpp
+	Common/Data/Encoding/Compression.h
+	Common/Data/Encoding/Shiftjis.h
+	Common/Data/Encoding/Utf8.cpp
+	Common/Data/Encoding/Utf8.h
+	Common/Data/Encoding/Utf16.h
+	Common/Data/Hash/Hash.cpp
+	Common/Data/Hash/Hash.h
+	Common/Data/Text/I18n.cpp
+	Common/Data/Text/I18n.h
+	Common/Data/Text/Parsers.cpp
+	Common/Data/Text/Parsers.h
+	Common/Data/Text/WrapText.cpp
+	Common/Data/Text/WrapText.h
+	Common/Data/Random/Rng.h
+	Common/Input/GestureDetector.cpp
+	Common/Input/GestureDetector.h
+	Common/Input/KeyCodes.h
+	Common/Input/InputState.cpp
+	Common/Input/InputState.h
+	Common/Thread/Executor.cpp
+	Common/Thread/Executor.h
+	Common/Thread/PrioritizedWorkQueue.cpp
+	Common/Thread/PrioritizedWorkQueue.h
+	Common/Thread/ThreadUtil.cpp
+	Common/Thread/ThreadUtil.h
+	Common/Thread/ThreadPool.cpp
+	Common/Thread/ThreadPool.h
 	Common/BitScan.h
 	Common/BitSet.h
 	Common/Buffer.h
@@ -944,14 +978,8 @@ endif()
 
 add_library(native STATIC
 	${nativeExtra}
-	ext/native/base/colorutil.cpp
-	ext/native/base/colorutil.h
 	ext/native/base/display.cpp
 	ext/native/base/display.h
-	ext/native/data/base64.cpp
-	ext/native/data/base64.h
-	ext/native/data/compression.cpp
-	ext/native/data/compression.h
 	ext/native/file/chunk_file.cpp
 	ext/native/file/chunk_file.h
 	ext/native/file/fd_util.cpp
@@ -992,19 +1020,12 @@ add_library(native STATIC
 	ext/native/gfx_es2/glsl_program.h
 	ext/native/gfx_es2/gl3stub.c
 	ext/native/gfx_es2/gl3stub.h
-	ext/native/i18n/i18n.cpp
-	ext/native/i18n/i18n.h
 	ext/native/image/png_load.cpp
 	ext/native/image/png_load.h
 	ext/native/image/zim_load.cpp
 	ext/native/image/zim_load.h
 	ext/native/image/zim_save.cpp
 	ext/native/image/zim_save.h
-	ext/native/input/gesture_detector.cpp
-	ext/native/input/gesture_detector.h
-	ext/native/input/keycodes.h
-	ext/native/input/input_state.h
-	ext/native/input/input_state.cpp
 	ext/native/json/json_reader.h
 	ext/native/json/json_reader.cpp
 	ext/native/json/json_writer.h
@@ -1045,14 +1066,6 @@ add_library(native STATIC
 	ext/native/thin3d/thin3d.h
 	ext/native/thin3d/thin3d_create.h
 	${THIN3D_PLATFORMS}
-	ext/native/thread/executor.cpp
-	ext/native/thread/executor.h
-	ext/native/thread/prioritizedworkqueue.cpp
-	ext/native/thread/prioritizedworkqueue.h
-	ext/native/thread/threadutil.cpp
-	ext/native/thread/threadutil.h
-	ext/native/thread/threadpool.cpp
-	ext/native/thread/threadpool.h
 	ext/native/ui/root.cpp
 	ext/native/ui/root.h
 	ext/native/ui/screen.cpp
@@ -1069,17 +1082,6 @@ add_library(native STATIC
 	ext/native/ui/view.h
 	ext/native/ui/viewgroup.cpp
 	ext/native/ui/viewgroup.h
-	ext/native/util/hash/hash.cpp
-	ext/native/util/hash/hash.h
-	ext/native/util/random/rng.h
-	ext/native/util/text/utf8.h
-	ext/native/util/text/utf8.cpp
-	ext/native/util/text/parsers.h
-	ext/native/util/text/parsers.cpp
-	ext/native/util/text/wrap_text.h
-	ext/native/util/text/wrap_text.cpp
-	ext/native/util/const_map.h
-	ext/native/util/tiny_set.h
 	ext/jpge/jpgd.cpp
 	ext/jpge/jpgd.h
 	ext/jpge/jpge.cpp
@@ -1096,7 +1098,7 @@ if(ANDROID)
 	set(ATOMIC_LIB atomic)
 endif()
 
-target_link_libraries(native ${LIBZIP_LIBRARY} ${PNG_LIBRARIES} ${ZLIB_LIBRARY} gason udis86 ${RT_LIB} ${nativeExtraLibs} ${ATOMIC_LIB})
+target_link_libraries(native ${LIBZIP_LIBRARY} ${PNG_LIBRARIES} ${ZLIB_LIBRARY} gason udis86 ${RT_LIB} ${nativeExtraLibs} ${ATOMIC_LIB} Common)
 if(TARGET Ext::GLEW)
 	target_link_libraries(native Ext::GLEW)
 endif()

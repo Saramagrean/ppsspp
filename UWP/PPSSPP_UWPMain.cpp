@@ -4,16 +4,16 @@
 #include <mutex>
 
 #include "base/NativeApp.h"
-#include "input/input_state.h"
+#include "Common/Input/InputState.h"
 #include "file/vfs.h"
 #include "file/zip_read.h"
 #include "file/file_util.h"
 #include "net/http_client.h"
 #include "net/resolve.h"
 #include "base/display.h"
-#include "thread/threadutil.h"
+#include "Common/Thread/ThreadUtil.h"
 #include "thin3d/thin3d_create.h"
-#include "util/text/utf8.h"
+#include "Common/Data/Encoding/Utf8.h"
 
 #include "Common/Common.h"
 #include "Common/DirectXHelper.h"

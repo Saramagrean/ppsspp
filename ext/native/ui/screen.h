@@ -15,11 +15,10 @@
 
 #include <vector>
 #include <mutex>
-
-#include "base/NativeApp.h"
-#include "input/input_state.h"
+#include <string>
 
 #include "Common/Common.h"
+#include "Common/Input/InputState.h"
 
 namespace UI {
 	class View;
