@@ -27,14 +27,14 @@
 #include "GPU/Directx9/FramebufferManagerDX9.h"
 #include "GPU/Directx9/ShaderManagerDX9.h"
 #include "GPU/Directx9/DepalettizeShaderDX9.h"
-#include "gfx/d3d9_state.h"
+#include "Common/GPU/D3D9/D3D9StateCache.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "Core/Config.h"
 #include "Core/Host.h"
 
 #include "ext/xxhash.h"
-#include "math/math_util.h"
+#include "Common/Math/math_util.h"
 
 
 namespace DX9 {

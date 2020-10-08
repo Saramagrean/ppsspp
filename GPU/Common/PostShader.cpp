@@ -22,10 +22,11 @@
 #include <vector>
 #include <algorithm>
 
-#include "file/ini_file.h"
-#include "file/file_util.h"
-#include "file/vfs.h"
-#include "gfx_es2/gpu_features.h"
+#include "Common/Data/Format/IniFile.h"
+#include "Common/File/FileUtil.h"
+#include "Common/File/DirListing.h"
+#include "Common/File/VFS/VFS.h"
+#include "Common/GPU/OpenGL/GLFeatures.h"
 
 #include "Common/StringUtils.h"
 #include "Core/Config.h"

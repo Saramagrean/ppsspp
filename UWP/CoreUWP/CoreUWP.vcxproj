@@ -520,6 +520,7 @@
     <ClInclude Include="..\..\Core\HW\SasReverb.h" />
     <ClInclude Include="..\..\Core\HW\SimpleAudioDec.h" />
     <ClInclude Include="..\..\Core\HW\StereoResampler.h" />
+    <ClInclude Include="..\..\Core\KeyMap.h" />
     <ClInclude Include="..\..\Core\Loaders.h" />
     <ClInclude Include="..\..\Core\MemFault.h" />
     <ClInclude Include="..\..\Core\MemMap.h" />
@@ -567,6 +568,7 @@
     <ClInclude Include="..\..\Core\System.h" />
     <ClInclude Include="..\..\Core\TextureReplacer.h" />
     <ClInclude Include="..\..\Core\ThreadEventQueue.h" />
+    <ClInclude Include="..\..\Core\ThreadPools.h" />
     <ClInclude Include="..\..\Core\Util\PortManager.h" />
     <ClInclude Include="..\..\Core\WebServer.h" />
     <ClInclude Include="..\..\Core\Util\AudioFormat.h" />
@@ -745,6 +747,7 @@
     <ClCompile Include="..\..\Core\HW\SasReverb.cpp" />
     <ClCompile Include="..\..\Core\HW\SimpleAudioDec.cpp" />
     <ClCompile Include="..\..\Core\HW\StereoResampler.cpp" />
+    <ClCompile Include="..\..\Core\KeyMap.cpp" />
     <ClCompile Include="..\..\Core\Loaders.cpp" />
     <ClCompile Include="..\..\Core\MemFault.cpp" />
     <ClCompile Include="..\..\Core\MemMap.cpp" />
@@ -818,6 +821,7 @@
     <ClCompile Include="..\..\Core\Screenshot.cpp" />
     <ClCompile Include="..\..\Core\System.cpp" />
     <ClCompile Include="..\..\Core\TextureReplacer.cpp" />
+    <ClCompile Include="..\..\Core\ThreadPools.cpp" />
     <ClCompile Include="..\..\Core\Util\PortManager.cpp" />
     <ClCompile Include="..\..\Core\WebServer.cpp" />
     <ClCompile Include="..\..\Core\Util\AudioFormat.cpp" />

@@ -25,8 +25,8 @@
 #include "Core/Config.h"
 #include "Core/CoreTiming.h"
 
-#include "gfx/gl_debug_log.h"
-#include "profiler/profiler.h"
+#include "Common/GPU/OpenGL/GLDebugLog.h"
+#include "Common/Profiler/Profiler.h"
 
 #include "GPU/Math3D.h"
 #include "GPU/GPUState.h"

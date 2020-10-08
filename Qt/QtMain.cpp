@@ -31,9 +31,10 @@
 #include "SDL_audio.h"
 #endif
 
-#include "base/NativeApp.h"
-#include "gfx_es2/gpu_features.h"
-#include "math/math_util.h"
+#include "Common/System/NativeApp.h"
+#include "Common/System/System.h"
+#include "Common/GPU/OpenGL/GLFeatures.h"
+#include "Common/Math/math_util.h"
 
 #include "QtMain.h"
 #include "Common/Data/Text/I18n.h"

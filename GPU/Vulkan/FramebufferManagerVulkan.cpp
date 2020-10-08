@@ -17,17 +17,17 @@
 
 #include <algorithm>
 
-#include "profiler/profiler.h"
+#include "Common/Profiler/Profiler.h"
 
-#include "base/display.h"
-#include "math/lin/matrix4x4.h"
-#include "math/dataconv.h"
-#include "ext/native/thin3d/thin3d.h"
+#include "Common/System/Display.h"
+#include "Common/Math/lin/matrix4x4.h"
+#include "Common/Data/Convert/SmallDataConvert.h"
+#include "Common/GPU/thin3d.h"
 
-#include "Common/Vulkan/VulkanContext.h"
-#include "Common/Vulkan/VulkanMemory.h"
-#include "Common/Vulkan/VulkanImage.h"
-#include "thin3d/VulkanRenderManager.h"
+#include "Common/GPU/Vulkan/VulkanContext.h"
+#include "Common/GPU/Vulkan/VulkanMemory.h"
+#include "Common/GPU/Vulkan/VulkanImage.h"
+#include "Common/GPU/Vulkan/VulkanRenderManager.h"
 #include "Common/ColorConv.h"
 #include "Core/MemMap.h"
 #include "Core/Config.h"

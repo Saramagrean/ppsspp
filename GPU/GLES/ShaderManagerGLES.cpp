@@ -23,18 +23,18 @@
 #include <cstdio>
 #include <map>
 
-#include "math/dataconv.h"
-#include "gfx/gl_debug_log.h"
-#include "gfx_es2/gpu_features.h"
+#include "Common/Data/Convert/SmallDataConvert.h"
+#include "Common/GPU/OpenGL/GLDebugLog.h"
+#include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/Data/Text/I18n.h"
-#include "math/math_util.h"
-#include "math/lin/matrix4x4.h"
-#include "profiler/profiler.h"
-#include "thin3d/thin3d.h"
-#include "thin3d/GLRenderManager.h"
+#include "Common/Math/math_util.h"
+#include "Common/Math/lin/matrix4x4.h"
+#include "Common/Profiler/Profiler.h"
+#include "Common/GPU/thin3d.h"
+#include "Common/GPU/OpenGL/GLRenderManager.h"
 
 #include "Common/Log.h"
-#include "Common/FileUtil.h"
+#include "Common/File/FileUtil.h"
 #include "Common/TimeUtil.h"
 #include "Core/Config.h"
 #include "Core/Host.h"

@@ -19,12 +19,13 @@
 #include <vector>
 
 #include "Common/Data/Color/RGBAUtil.h"
-#include "gfx_es2/draw_buffer.h"
+#include "Common/Render/DrawBuffer.h"
 #include "Common/Data/Text/I18n.h"
-#include "math/math_util.h"
-#include "ui/ui_context.h"
+#include "Common/Math/math_util.h"
+#include "Common/UI/Context.h"
 
 #include "Common/Common.h"
+#include "Common/Log.h"
 #include "Core/Config.h"
 #include "Core/System.h"
 #include "UI/GamepadEmu.h"

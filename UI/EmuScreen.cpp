@@ -19,25 +19,24 @@
 
 #include <algorithm>
 
-#include "base/display.h"
-#include "base/NativeApp.h"
-#include "profiler/profiler.h"
+#include "Common/Render/TextureAtlas.h"
+#include "Common/GPU/OpenGL/GLFeatures.h"
+#include "Common/Render/Text/draw_text.h"
 
-#include "gfx/texture_atlas.h"
-#include "gfx_es2/gpu_features.h"
-#include "gfx_es2/draw_text.h"
-
-#include "math/curves.h"
-#include "ui/root.h"
-#include "ui/ui.h"
-#include "ui/ui_context.h"
-#include "ui/ui_tween.h"
-#include "ui/view.h"
+#include "Common/UI/Root.h"
+#include "Common/UI/UI.h"
+#include "Common/UI/Context.h"
+#include "Common/UI/Tween.h"
+#include "Common/UI/View.h"
 
 #include "Common/Data/Text/I18n.h"
 #include "Common/Input/InputState.h"
-#include "Common/KeyMap.h"
 #include "Common/Log.h"
+#include "Common/System/Display.h"
+#include "Common/System/System.h"
+#include "Common/System/NativeApp.h"
+#include "Common/Profiler/Profiler.h"
+#include "Common/Math/curves.h"
 #include "Common/TimeUtil.h"
 
 #ifndef MOBILE_DEVICE
@@ -49,6 +48,7 @@
 #include "Core/CoreParameter.h"
 #include "Core/Core.h"
 #include "Core/Host.h"
+#include "Core/KeyMap.h"
 #include "Core/Reporting.h"
 #include "Core/System.h"
 #include "GPU/GPUState.h"

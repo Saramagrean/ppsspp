@@ -5,7 +5,7 @@
 #include <WinError.h>
 
 #include "Common/Log.h"
-#include "base/display.h"
+#include "Common/System/Display.h"
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Data/Text/I18n.h"
 
@@ -15,9 +15,9 @@
 #include "Core/System.h"
 #include "Windows/GPU/D3D11Context.h"
 #include "Windows/W32Util/Misc.h"
-#include "thin3d/thin3d.h"
-#include "thin3d/thin3d_create.h"
-#include "thin3d/d3d11_loader.h"
+#include "Common/GPU/thin3d.h"
+#include "Common/GPU/thin3d_create.h"
+#include "Common/GPU/D3D11/D3D11Loader.h"
 
 #ifdef __MINGW32__
 #undef __uuidof

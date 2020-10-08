@@ -35,8 +35,8 @@
 #include <cstring>
 #include <atomic>
 
-#include "base/NativeApp.h"
-#include "Common/MathUtil.h"
+#include "Common/System/System.h"
+#include "Common/Math/math_util.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Log.h"
 #include "Common/TimeUtil.h"

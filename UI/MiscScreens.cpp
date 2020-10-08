@@ -20,21 +20,23 @@
 #include <algorithm>
 #include <functional>
 
-#include "base/NativeApp.h"
-#include "base/display.h"
-#include "gfx_es2/draw_buffer.h"
-#include "math/curves.h"
-#include "ui/ui_context.h"
-#include "ui/view.h"
-#include "ui/viewgroup.h"
-#include "ui/ui.h"
-#include "file/vfs.h"
+#include "Common/Render/DrawBuffer.h"
+#include "Common/UI/Context.h"
+#include "Common/UI/View.h"
+#include "Common/UI/ViewGroup.h"
+#include "Common/UI/UI.h"
+
+#include "Common/System/Display.h"
+#include "Common/System/NativeApp.h"
+#include "Common/System/System.h"
+#include "Common/Math/curves.h"
+#include "Common/File/VFS/VFS.h"
 
 #include "Common/Data/Color/RGBAUtil.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/Data/Random/Rng.h"
 #include "Common/TimeUtil.h"
-#include "Common/FileUtil.h"
+#include "Common/File/FileUtil.h"
 #include "Core/Config.h"
 #include "Core/Host.h"
 #include "Core/System.h"
@@ -713,6 +715,9 @@ void CreditsScreen::render() {
 		"xebra",
 		"LunaMoo",
 		"zminhquanz",
+		"ANR2ME",
+		"adenovan",
+		"iota97",
 		"",
 		cr->T("specialthanks", "Special thanks to:"),
 		specialthanksMaxim.c_str(),

@@ -19,14 +19,14 @@
 
 #include "headless/WindowsHeadlessHost.h"
 
-#include "gfx/gl_common.h"
-#include "gfx_es2/gpu_features.h"
-#include "file/vfs.h"
-#include "file/zip_read.h"
+#include "Common/GPU/OpenGL/GLCommon.h"
+#include "Common/GPU/OpenGL/GLFeatures.h"
+#include "Common/File/VFS/VFS.h"
+#include "Common/File/VFS/AssetReader.h"
 
 #include "Common/CommonWindows.h"
 #include "Common/Log.h"
-#include "Common/FileUtil.h"
+#include "Common/File/FileUtil.h"
 #include "Common/TimeUtil.h"
 
 #include "Core/CoreParameter.h"

@@ -102,59 +102,14 @@ ARCH_FILES := \
 endif
 
 NATIVE_FILES :=\
-  $(SRC)/ext/native/base/display.cpp \
-  $(SRC)/ext/native/file/fd_util.cpp \
-  $(SRC)/ext/native/file/chunk_file.cpp \
-  $(SRC)/ext/native/file/file_util.cpp \
-  $(SRC)/ext/native/file/free.cpp \
-  $(SRC)/ext/native/file/path.cpp \
-  $(SRC)/ext/native/file/ini_file.cpp \
-  $(SRC)/ext/native/file/zip_read.cpp \
-  $(SRC)/ext/native/json/json_reader.cpp \
-  $(SRC)/ext/native/json/json_writer.cpp \
-  $(SRC)/ext/native/math/fast/fast_math.c \
-  $(SRC)/ext/native/math/fast/fast_matrix.c \
-  $(SRC)/ext/native/math/dataconv.cpp \
-  $(SRC)/ext/native/math/math_util.cpp \
-  $(SRC)/ext/native/math/curves.cpp \
-  $(SRC)/ext/native/math/expression_parser.cpp \
-  $(SRC)/ext/native/math/lin/vec3.cpp.arm \
-  $(SRC)/ext/native/math/lin/matrix4x4.cpp.arm \
-  $(SRC)/ext/native/net/http_client.cpp \
-  $(SRC)/ext/native/net/http_server.cpp \
-  $(SRC)/ext/native/net/http_headers.cpp \
-  $(SRC)/ext/native/net/resolve.cpp \
-  $(SRC)/ext/native/net/sinks.cpp \
-  $(SRC)/ext/native/net/url.cpp \
-  $(SRC)/ext/native/net/websocket_server.cpp \
-  $(SRC)/ext/native/profiler/profiler.cpp \
-  $(SRC)/ext/native/gfx_es2/glsl_program.cpp \
-  $(SRC)/ext/native/gfx_es2/gpu_features.cpp \
-  $(SRC)/ext/native/gfx_es2/gl3stub.c \
-  $(SRC)/ext/native/gfx_es2/draw_buffer.cpp.arm \
-  $(SRC)/ext/native/gfx_es2/draw_text.cpp.arm \
-  $(SRC)/ext/native/gfx_es2/draw_text_android.cpp.arm \
-  $(SRC)/ext/native/gfx/gl_debug_log.cpp \
-  $(SRC)/ext/native/gfx/texture_atlas.cpp \
-  $(SRC)/ext/native/image/zim_load.cpp \
-  $(SRC)/ext/native/image/zim_save.cpp \
-  $(SRC)/ext/native/image/png_load.cpp \
-  $(SRC)/ext/native/thin3d/thin3d.cpp \
-  $(SRC)/ext/native/thin3d/thin3d_gl.cpp \
-  $(SRC)/ext/native/thin3d/thin3d_vulkan.cpp \
-  $(SRC)/ext/native/thin3d/GLRenderManager.cpp \
-  $(SRC)/ext/native/thin3d/GLQueueRunner.cpp \
-  $(SRC)/ext/native/thin3d/VulkanRenderManager.cpp \
-  $(SRC)/ext/native/thin3d/VulkanQueueRunner.cpp \
-  $(SRC)/ext/native/thin3d/DataFormatGL.cpp \
-  $(SRC)/ext/native/ui/root.cpp \
-  $(SRC)/ext/native/ui/view.cpp \
-  $(SRC)/ext/native/ui/viewgroup.cpp \
-  $(SRC)/ext/native/ui/ui.cpp \
-  $(SRC)/ext/native/ui/ui_screen.cpp \
-  $(SRC)/ext/native/ui/ui_tween.cpp \
-  $(SRC)/ext/native/ui/ui_context.cpp \
-  $(SRC)/ext/native/ui/screen.cpp
+  $(SRC)/Common/GPU/OpenGL/gl3stub.c \
+  $(SRC)/Common/GPU/OpenGL/thin3d_gl.cpp \
+  $(SRC)/Common/GPU/OpenGL/GLDebugLog.cpp \
+  $(SRC)/Common/GPU/OpenGL/GLSLProgram.cpp \
+  $(SRC)/Common/GPU/OpenGL/GLFeatures.cpp \
+  $(SRC)/Common/GPU/OpenGL/GLRenderManager.cpp \
+  $(SRC)/Common/GPU/OpenGL/GLQueueRunner.cpp \
+  $(SRC)/Common/GPU/OpenGL/DataFormatGL.cpp
 
 EGL_FILES := \
   $(SRC)/Common/GL/GLInterface/EGL.cpp \
@@ -162,11 +117,14 @@ EGL_FILES := \
   $(SRC)/Common/GL/GLInterface/GLInterface.cpp
 
 VULKAN_FILES := \
-  $(SRC)/Common/Vulkan/VulkanLoader.cpp \
-  $(SRC)/Common/Vulkan/VulkanContext.cpp \
-  $(SRC)/Common/Vulkan/VulkanDebug.cpp \
-  $(SRC)/Common/Vulkan/VulkanImage.cpp \
-  $(SRC)/Common/Vulkan/VulkanMemory.cpp \
+  $(SRC)/Common/GPU/Vulkan/thin3d_vulkan.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanQueueRunner.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanRenderManager.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanLoader.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanContext.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanDebug.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanImage.cpp \
+  $(SRC)/Common/GPU/Vulkan/VulkanMemory.cpp \
   $(SRC)/GPU/Vulkan/FragmentShaderGeneratorVulkan.cpp \
   $(SRC)/GPU/Vulkan/DrawEngineVulkan.cpp \
   $(SRC)/GPU/Vulkan/FramebufferManagerVulkan.cpp \
@@ -270,23 +228,69 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/Crypto/sha1.cpp \
   $(SRC)/Common/Crypto/sha256.cpp \
   $(SRC)/Common/Data/Color/RGBAUtil.cpp \
+  $(SRC)/Common/Data/Convert/SmallDataConvert.cpp \
   $(SRC)/Common/Data/Encoding/Base64.cpp \
   $(SRC)/Common/Data/Encoding/Compression.cpp \
   $(SRC)/Common/Data/Encoding/Utf8.cpp \
+  $(SRC)/Common/Data/Format/RIFF.cpp \
+  $(SRC)/Common/Data/Format/IniFile.cpp \
+  $(SRC)/Common/Data/Format/JSONReader.cpp \
+  $(SRC)/Common/Data/Format/JSONWriter.cpp \
+  $(SRC)/Common/Data/Format/PNGLoad.cpp \
+  $(SRC)/Common/Data/Format/PNGLoad.h \
+  $(SRC)/Common/Data/Format/ZIMLoad.cpp \
+  $(SRC)/Common/Data/Format/ZIMLoad.h \
+  $(SRC)/Common/Data/Format/ZIMSave.cpp \
+  $(SRC)/Common/Data/Format/ZIMSave.h \
   $(SRC)/Common/Data/Hash/Hash.cpp \
   $(SRC)/Common/Data/Text/I18n.cpp \
   $(SRC)/Common/Data/Text/Parsers.cpp \
   $(SRC)/Common/Data/Text/WrapText.cpp \
+  $(SRC)/Common/File/VFS/VFS.cpp \
+  $(SRC)/Common/File/VFS/AssetReader.cpp \
+  $(SRC)/Common/File/DiskFree.cpp \
+  $(SRC)/Common/File/PathBrowser.cpp \
+  $(SRC)/Common/File/FileUtil.cpp \
+  $(SRC)/Common/File/DirListing.cpp \
+  $(SRC)/Common/File/FileDescriptor.cpp \
+  $(SRC)/Common/GPU/thin3d.cpp \
+  $(SRC)/Common/Render/DrawBuffer.cpp \
+  $(SRC)/Common/Render/TextureAtlas.cpp \
+  $(SRC)/Common/Render/Text/draw_text.cpp \
+  $(SRC)/Common/Render/Text/draw_text_android.cpp \
+  $(SRC)/Common/Input/GestureDetector.cpp \
+  $(SRC)/Common/Input/InputState.cpp \
+  $(SRC)/Common/Math/fast/fast_math.c \
+  $(SRC)/Common/Math/fast/fast_matrix.c \
+  $(SRC)/Common/Math/math_util.cpp \
+  $(SRC)/Common/Math/curves.cpp \
+  $(SRC)/Common/Math/expression_parser.cpp \
+  $(SRC)/Common/Math/lin/vec3.cpp.arm \
+  $(SRC)/Common/Math/lin/matrix4x4.cpp.arm \
+  $(SRC)/Common/Net/HTTPClient.cpp \
+  $(SRC)/Common/Net/HTTPHeaders.cpp \
+  $(SRC)/Common/Net/HTTPServer.cpp \
+  $(SRC)/Common/Net/Resolve.cpp \
+  $(SRC)/Common/Net/Sinks.cpp \
+  $(SRC)/Common/Net/URL.cpp \
+  $(SRC)/Common/Net/WebsocketServer.cpp \
+  $(SRC)/Common/Profiler/Profiler.cpp \
+  $(SRC)/Common/System/Display.cpp \
   $(SRC)/Common/Thread/Executor.cpp \
   $(SRC)/Common/Thread/PrioritizedWorkQueue.cpp \
   $(SRC)/Common/Thread/ThreadPool.cpp \
   $(SRC)/Common/Thread/ThreadUtil.cpp \
-  $(SRC)/Common/Input/GestureDetector.cpp \
-  $(SRC)/Common/Input/InputState.cpp \
+  $(SRC)/Common/UI/Root.cpp \
+  $(SRC)/Common/UI/Screen.cpp \
+  $(SRC)/Common/UI/UI.cpp \
+  $(SRC)/Common/UI/Context.cpp \
+  $(SRC)/Common/UI/UIScreen.cpp \
+  $(SRC)/Common/UI/Tween.cpp \
+  $(SRC)/Common/UI/View.cpp \
+  $(SRC)/Common/UI/ViewGroup.cpp \
   $(SRC)/Common/Serialize/Serializer.cpp \
   $(SRC)/Common/ColorConv.cpp \
   $(SRC)/Common/ExceptionHandlerSetup.cpp \
-  $(SRC)/Common/KeyMap.cpp \
   $(SRC)/Common/Log.cpp \
   $(SRC)/Common/LogManager.cpp \
   $(SRC)/Common/MemArenaAndroid.cpp \
@@ -294,11 +298,8 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/MemArenaWin32.cpp \
   $(SRC)/Common/MemArenaPosix.cpp \
   $(SRC)/Common/MemoryUtil.cpp \
-  $(SRC)/Common/FileUtil.cpp \
   $(SRC)/Common/StringUtils.cpp \
   $(SRC)/Common/SysError.cpp \
-  $(SRC)/Common/ThreadPools.cpp \
-  $(SRC)/Common/Timer.cpp \
   $(SRC)/Common/TimeUtil.cpp \
   $(SRC)/GPU/Math3D.cpp \
   $(SRC)/GPU/GPU.cpp \
@@ -373,6 +374,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/CwCheat.cpp \
   $(SRC)/Core/HDRemaster.cpp \
   $(SRC)/Core/Instance.cpp \
+  $(SRC)/Core/KeyMap.cpp \
   $(SRC)/Core/Host.cpp \
   $(SRC)/Core/Loaders.cpp \
   $(SRC)/Core/PSPLoaders.cpp \
@@ -391,6 +393,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Screenshot.cpp \
   $(SRC)/Core/System.cpp \
   $(SRC)/Core/TextureReplacer.cpp \
+  $(SRC)/Core/ThreadPools.cpp \
   $(SRC)/Core/WebServer.cpp \
   $(SRC)/Core/Debugger/Breakpoints.cpp \
   $(SRC)/Core/Debugger/DisassemblyManager.cpp \
@@ -615,38 +618,25 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/TextureUtil.cpp \
   $(SRC)/UI/ComboKeyMappingScreen.cpp
 
-#NATIVE
-#LOCAL_CFLAGS := -O3 -DUSING_GLES2 -fsigned-char -fno-strict-aliasing -Wall -Wno-multichar -D__STDC_CONSTANT_MACROS
-#LOCAL_CPPFLAGS := -fno-exceptions -std=gnu++11 -fno-rtti -Wno-reorder
-#LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../ext $(LOCAL_PATH)/../../ext/libpng17 $(LOCAL_PATH)/../../ext/libzip $(LOCAL_PATH)/../../ext/glslang ..
-
-#Portable native and separate code on android in future is easy you needs add files 
-#by ($(target_arch_ABI),arquitecture (armeabi-v7a , armeabi , x86 , MIPS)
-# ifeq ($(TARGET_ARCH_ABI),armeabi-v7a)
 ifeq ($(findstring armeabi-v7a,$(TARGET_ARCH_ABI)),armeabi-v7a)
-LOCAL_CFLAGS := $(LOCAL_CFLAGS) -DARM -DARMEABI_V7A
+LOCAL_CFLAGS := $(LOCAL_CFLAGS) -DARM
 LOCAL_SRC_FILES := $(LOCAL_SRC_FILES) \
-    $(SRC)/ext/native/math/fast/fast_matrix_neon.S.neon \
-    ../../ext/libpng17/arm/arm_init.c \
-    ../../ext/libpng17/arm/filter_neon_intrinsics.c \
-    ../../ext/libpng17/arm/filter_neon.S.neon
+    $(SRC)/Common/Math/fast/fast_matrix_neon.S.neon \
+    $(SRC)/ext/libpng17/arm/arm_init.c \
+    $(SRC)/ext/libpng17/arm/filter_neon_intrinsics.c \
+    $(SRC)/ext/libpng17/arm/filter_neon.S.neon
 
-else ifeq ($(TARGET_ARCH_ABI),armeabi)
-LOCAL_CFLAGS := $(LOCAL_CFLAGS) -DARM -DARMEABI -march=armv6
 else ifeq ($(TARGET_ARCH_ABI),x86)
-LOCAL_CFLAGS := $(LOCAL_CFLAGS) -D_M_IX86
 LOCAL_SRC_FILES := $(LOCAL_SRC_FILES) \
-    $(SRC)/ext/native/math/fast/fast_matrix_sse.c
+    $(SRC)/Common/Math/fast/fast_matrix_sse.c
 else ifeq ($(TARGET_ARCH_ABI),x86_64)
-LOCAL_CFLAGS := $(LOCAL_CFLAGS) -D_M_X64
 LOCAL_SRC_FILES := $(LOCAL_SRC_FILES) \
-    $(SRC)/ext/native/math/fast/fast_matrix_sse.c
+    $(SRC)/Common/Math/fast/fast_matrix_sse.c
 endif
 
 ifneq ($(SKIPAPP),1)
   include $(BUILD_SHARED_LIBRARY)
 endif
-
 
 ifeq ($(HEADLESS),1)
   include $(CLEAR_VARS)

@@ -1,10 +1,10 @@
 #include "UI/OnScreenDisplay.h"
 
 #include "Common/Data/Color/RGBAUtil.h"
-#include "gfx/texture_atlas.h"
-#include "gfx_es2/draw_buffer.h"
+#include "Common/Render/TextureAtlas.h"
+#include "Common/Render/DrawBuffer.h"
 
-#include "ui/ui_context.h"
+#include "Common/UI/Context.h"
 
 #include "Common/TimeUtil.h"
 

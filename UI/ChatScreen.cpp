@@ -1,15 +1,15 @@
 #include <ctype.h>
 #include "ppsspp_config.h"
 
-#include "base/NativeApp.h"
-#include "ui/root.h"
-#include "ui/ui_context.h"
-#include "ui/view.h"
-#include "ui/viewgroup.h"
-#include "ui/ui.h"
+#include "Common/UI/Root.h"
+#include "Common/UI/Context.h"
+#include "Common/UI/View.h"
+#include "Common/UI/ViewGroup.h"
+#include "Common/UI/UI.h"
 
 #include "Common/Data/Text/I18n.h"
 #include "Common/Data/Encoding/Utf8.h"
+#include "Common/System/System.h"
 #include "Core/Config.h"
 #include "Core/System.h"
 #include "Core/HLE/proAdhoc.h"

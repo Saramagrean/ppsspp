@@ -19,8 +19,8 @@
 
 #include <vector>
 
-#include "Common/Hashmaps.h"
-#include "thin3d/GLRenderManager.h"
+#include "Common/Data/Collections/Hashmaps.h"
+#include "Common/GPU/OpenGL/GLRenderManager.h"
 #include "GPU/Common/ShaderCommon.h"
 #include "GPU/Common/ShaderId.h"
 #include "GPU/GLES/VertexShaderGeneratorGLES.h"

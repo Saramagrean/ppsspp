@@ -18,10 +18,10 @@
 
 #include <thread>
 
-#include "profiler/profiler.h"
+#include "Common/Profiler/Profiler.h"
 
 #include "Common/Log.h"
-#include "Common/FileUtil.h"
+#include "Common/File/FileUtil.h"
 #include "Common/GraphicsContext.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/TimeUtil.h"
@@ -43,8 +43,8 @@
 #include "GPU/Vulkan/FramebufferManagerVulkan.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 #include "GPU/Vulkan/TextureCacheVulkan.h"
-#include "thin3d/VulkanRenderManager.h"
-#include "thin3d/VulkanQueueRunner.h"
+#include "Common/GPU/Vulkan/VulkanRenderManager.h"
+#include "Common/GPU/Vulkan/VulkanQueueRunner.h"
 
 #include "Core/MIPS/MIPS.h"
 #include "Core/HLE/sceKernelThread.h"

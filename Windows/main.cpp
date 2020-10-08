@@ -21,9 +21,9 @@
 #include <functional>
 
 #include "Common/CommonWindows.h"
-#include "Common/FileUtil.h"
+#include "Common/File/FileUtil.h"
 #include "Common/OSVersion.h"
-#include "Common/Vulkan/VulkanLoader.h"
+#include "Common/GPU/Vulkan/VulkanLoader.h"
 #include "ppsspp_config.h"
 
 #include <Wbemidl.h>
@@ -31,15 +31,16 @@
 #include <ShlObj.h>
 #include <mmsystem.h>
 
-#include "base/display.h"
-#include "base/NativeApp.h"
-#include "file/vfs.h"
-#include "file/zip_read.h"
+#include "Common/System/Display.h"
+#include "Common/System/NativeApp.h"
+#include "Common/System/System.h"
+#include "Common/File/VFS/VFS.h"
+#include "Common/File/VFS/AssetReader.h"
 #include "Common/Data/Text/I18n.h"
-#include "profiler/profiler.h"
+#include "Common/Profiler/Profiler.h"
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/Data/Encoding/Utf8.h"
-#include "net/resolve.h"
+#include "Common/Net/Resolve.h"
 
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"

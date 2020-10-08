@@ -17,9 +17,9 @@
 
 #include <algorithm>
 
-#include "math/dataconv.h"
-#include "profiler/profiler.h"
-#include "thin3d/VulkanRenderManager.h"
+#include "Common/Data/Convert/SmallDataConvert.h"
+#include "Common/Profiler/Profiler.h"
+#include "Common/GPU/Vulkan/VulkanRenderManager.h"
 
 #include "Common/Log.h"
 #include "Common/MemoryUtil.h"
@@ -34,8 +34,8 @@
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
 
-#include "Common/Vulkan/VulkanContext.h"
-#include "Common/Vulkan/VulkanMemory.h"
+#include "Common/GPU/Vulkan/VulkanContext.h"
+#include "Common/GPU/Vulkan/VulkanMemory.h"
 
 #include "GPU/Common/SplineCommon.h"
 #include "GPU/Common/TransformCommon.h"
