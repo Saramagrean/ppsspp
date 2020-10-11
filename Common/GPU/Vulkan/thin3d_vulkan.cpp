@@ -245,7 +245,7 @@ public:
 
 class VKPipeline : public Pipeline {
 public:
-	VKPipeline(VulkanContext *vulkan, size_t size) : vulkan_(vulkan) {
+	VKPipeline(VulkanContext *vulkan, size_t size, PipelineFlags _flags) : vulkan_(vulkan), flags(_flags) {
 		uboSize_ = (int)size;
 		ubo_ = new uint8_t[uboSize_];
 	}
@@ -274,6 +274,8 @@ public:
 
 	VkPipeline backbufferPipeline = VK_NULL_HANDLE;
 	VkPipeline framebufferPipeline = VK_NULL_HANDLE;
+
+	PipelineFlags flags;
 	int stride[4]{};
 	int dynamicUniformSize = 0;
 
@@ -993,11 +995,7 @@ VkDescriptorSet VKContext::GetOrCreateDescriptorSet(VkBuffer buf) {
 		if (key.imageViews_[i] && key.samplers_[i] && key.samplers_[i]->GetSampler()) {
 			imageDesc[i].imageView = key.imageViews_[i];
 			imageDesc[i].sampler = key.samplers_[i]->GetSampler();
-#ifdef VULKAN_USE_GENERAL_LAYOUT_FOR_COLOR
-			imageDesc[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-#else
 			imageDesc[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-#endif
 			writes[numWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			writes[numWrites].dstSet = descSet;
 			writes[numWrites].dstArrayElement = 0;
@@ -1018,11 +1016,18 @@ VkDescriptorSet VKContext::GetOrCreateDescriptorSet(VkBuffer buf) {
 }
 
 Pipeline *VKContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
-	VKPipeline *pipeline = new VKPipeline(vulkan_, desc.uniformDesc ? desc.uniformDesc->uniformBufferSize : 16 * sizeof(float));
 	VKInputLayout *input = (VKInputLayout *)desc.inputLayout;
 	VKBlendState *blend = (VKBlendState *)desc.blend;
 	VKDepthStencilState *depth = (VKDepthStencilState *)desc.depthStencil;
 	VKRasterState *raster = (VKRasterState *)desc.raster;
+
+	u32 pipelineFlags = 0;
+	if (depth->info.depthTestEnable || depth->info.stencilTestEnable) {
+		pipelineFlags |= PIPELINE_FLAG_USES_DEPTH_STENCIL;
+	}
+
+	VKPipeline *pipeline = new VKPipeline(vulkan_, desc.uniformDesc ? desc.uniformDesc->uniformBufferSize : 16 * sizeof(float), (PipelineFlags)pipelineFlags);
+
 	for (int i = 0; i < (int)input->bindings.size(); i++) {
 		pipeline->stride[i] = input->bindings[i].stride;
 	}
@@ -1340,9 +1345,9 @@ void VKContext::DrawUP(const void *vdata, int vertexCount) {
 void VKContext::BindCompatiblePipeline() {
 	VkRenderPass renderPass = renderManager_.GetCompatibleRenderPass();
 	if (renderPass == renderManager_.GetBackbufferRenderPass()) {
-		renderManager_.BindPipeline(curPipeline_->backbufferPipeline);
+		renderManager_.BindPipeline(curPipeline_->backbufferPipeline, curPipeline_->flags);
 	} else {
-		renderManager_.BindPipeline(curPipeline_->framebufferPipeline);
+		renderManager_.BindPipeline(curPipeline_->framebufferPipeline, curPipeline_->flags);
 	}
 }
 

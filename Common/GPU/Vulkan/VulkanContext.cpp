@@ -537,9 +537,13 @@ void VulkanContext::ChooseDevice(int physical_device) {
 			break;
 		}
 	}
-	if (deviceInfo_.preferredDepthStencilFormat == VK_FORMAT_UNDEFINED) {
-		// WTF? This is bad.
-		ERROR_LOG(G3D, "Could not find a usable depth stencil format.");
+
+	_assert_msg_(deviceInfo_.preferredDepthStencilFormat != VK_FORMAT_UNDEFINED, "Could not find a usable depth stencil format.");
+	VkFormatProperties preferredProps;
+	vkGetPhysicalDeviceFormatProperties(physical_devices_[physical_device_], deviceInfo_.preferredDepthStencilFormat, &preferredProps);
+	if ((preferredProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) &&
+		(preferredProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)) {
+		deviceInfo_.canBlitToPreferredDepthStencilFormat = true;
 	}
 
 	// This is as good a place as any to do this.
@@ -1122,24 +1126,6 @@ void TransitionImageLayout2(VkCommandBuffer cmd, VkImage image, int baseMip, int
 	VkImageLayout oldImageLayout, VkImageLayout newImageLayout,
 	VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,
 	VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask) {
-#ifdef VULKAN_USE_GENERAL_LAYOUT_FOR_COLOR
-	if (aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) {
-		// Hack to disable transaction elimination on ARM Mali.
-		if (oldImageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL || oldImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			oldImageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		if (newImageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL || newImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			newImageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	}
-#endif
-#ifdef VULKAN_USE_GENERAL_LAYOUT_FOR_DEPTH_STENCIL
-	if (aspectMask != VK_IMAGE_ASPECT_COLOR_BIT) {
-		// Hack to disable transaction elimination on ARM Mali.
-		if (oldImageLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL || oldImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			oldImageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		if (newImageLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL || newImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			newImageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	}
-#endif
 	VkImageMemoryBarrier image_memory_barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 	image_memory_barrier.srcAccessMask = srcAccessMask;
 	image_memory_barrier.dstAccessMask = dstAccessMask;

@@ -56,6 +56,7 @@
 
 #ifdef _WIN32
 #undef errno
+#undef ESHUTDOWN
 #undef ECONNABORTED
 #undef ECONNRESET
 #undef ENOTCONN
@@ -65,6 +66,7 @@
 #undef EALREADY
 #undef ETIMEDOUT
 #define errno WSAGetLastError()
+#define ESHUTDOWN WSAESHUTDOWN
 #define ECONNABORTED WSAECONNABORTED
 #define ECONNRESET WSAECONNRESET
 #define ENOTCONN WSAENOTCONN
@@ -74,11 +76,13 @@
 #define EALREADY WSAEALREADY
 #define ETIMEDOUT WSAETIMEDOUT
 inline bool connectInProgress(int errcode){ return (errcode == WSAEWOULDBLOCK || errcode == WSAEINPROGRESS || errcode == WSAEALREADY); }
+inline bool isDisconnected(int errcode) { return (errcode == WSAECONNRESET || errcode == WSAECONNABORTED || errcode == WSAESHUTDOWN); }
 #else
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
 #define closesocket close
 inline bool connectInProgress(int errcode){ return (errcode == EAGAIN || errcode == EWOULDBLOCK || errcode == EINPROGRESS || errcode == EALREADY); }
+inline bool isDisconnected(int errcode) { return (errcode == EPIPE || errcode == ECONNRESET || errcode == ECONNABORTED || errcode == ESHUTDOWN); }
 #endif
 
 #ifndef POLL_ERR
@@ -104,11 +108,9 @@ inline bool connectInProgress(int errcode){ return (errcode == EAGAIN || errcode
 // Server Listening Port
 #define SERVER_PORT 27312
 
-// Default GameMode Port
+// Default GameMode definitions
 #define ADHOC_GAMEMODE_PORT 31000
-
-#define GAMEMODE_UPDATE_INTERVAL 12000 // usec, based on JPCSP
-#define GAMEMODE_BUFFER_SIZE     0x8000
+#define GAMEMODE_UPDATE_INTERVAL 10000 // 12000 usec on JPCSP, but 10000 works better on BattleZone (in order to get full speed 60 FPS)
 
 // psp strutcs and definitions
 #define ADHOCCTL_MODE_NONE     -1
@@ -116,7 +118,7 @@ inline bool connectInProgress(int errcode){ return (errcode == EAGAIN || errcode
 #define ADHOCCTL_MODE_GAMEMODE  1
 
 // Event Types for Event Handler
-#define ADHOCCTL_EVENT_ERROR 0
+#define ADHOCCTL_EVENT_ERROR 0 // Used to pass error code to Adhocctl Handler?
 #define ADHOCCTL_EVENT_CONNECT 1
 #define ADHOCCTL_EVENT_DISCONNECT 2
 #define ADHOCCTL_EVENT_SCAN 3
@@ -156,15 +158,15 @@ inline bool connectInProgress(int errcode){ return (errcode == EAGAIN || errcode
 #define ADHOC_EV_CONNECT	0x0004
 #define ADHOC_EV_ACCEPT		0x0008
 #define ADHOC_EV_FLUSH		0x0010
-#define ADHOC_EV_INVALID	0x0100
-#define ADHOC_EV_DELETE		0x0200
+#define ADHOC_EV_INVALID	0x0100 // ignored on events but can be raised on revents? similar to POLLNVAL on posix poll?
+#define ADHOC_EV_DELETE		0x0200 // ignored on events but can be raised on revents? similar to POLLERR on posix poll?
 #define ADHOC_EV_ALERT		0x0400
-#define ADHOC_EV_DISCONNECT	0x0800
+#define ADHOC_EV_DISCONNECT	0x0800 // ignored on events but can be raised on revents? similar to POLLHUP on posix poll?
 
 // PTP Connection States
 #define ADHOC_PTP_STATE_CLOSED		0
 #define ADHOC_PTP_STATE_LISTEN		1
-#define ADHOC_PTP_STATE_SYN_SENT	2
+#define ADHOC_PTP_STATE_SYN_SENT	2 // 3-way handshake normally: [client]send SYN -> [server]recv SYN and reply with ACK+SYN -> [client]recv SYN and reply with ACK -> Established
 #define ADHOC_PTP_STATE_SYN_RCVD	3
 #define ADHOC_PTP_STATE_ESTABLISHED 4
 
@@ -209,9 +211,9 @@ extern uint8_t broadcastMAC[ETHER_ADDR_LEN];
 
 // Malloc Pool Information
 typedef struct SceNetMallocStat {
-	s32_le pool; // Pointer to the pool? // This should be the poolSize isn't?
-	s32_le maximum; // Maximum size of the pool? Maximum usage (ie. pool- free) ?
-	s32_le free; // How much memory is free
+	s32_le pool; // On Vantage Master Portable this is 0x1ffe0 on sceNetGetMallocStat, while the poolSize arg on sceNetInit was 0x20000
+	s32_le maximum; // On Vantage Master Portable this is 0x4050, Footprint of Highest amount allocated so far?
+	s32_le free; // On Vantage Master Portable this is 0x1f300, VMP compares this value with required size before sending data
 } PACK SceNetMallocStat;
 
 // Adhoc Virtual Network Name
@@ -303,6 +305,7 @@ typedef struct SceNetAdhocctlGameModeInfo {
 
 // GameModeUpdateInfo
 typedef struct GameModeUpdateInfo {
+	u32_le length; //size of GameModeUpdateInfo (16 bytes)
 	s32_le updated;
 	u64_le timeStamp;
 } PACK GameModeUpdateInfo;
@@ -353,10 +356,14 @@ typedef struct AdhocSocket {
 	s32_le type; // SOCK_PDP/SOCK_PTP
 	s32_le flags; // Socket Alert Flags
 	s32_le alerted_flags; // Socket Alerted Flags
+	s32_le nonblocking; // last non-blocking flag
+	u32 buffer_size;
 	u32 send_timeout; // default connect timeout
 	u32 recv_timeout; // default accept timeout
-	s32 retry_count; // combined with timeout to be used on keepalive
+	s32 retry_interval; // related to keepalive
+	s32 retry_count; // multiply with retry interval to be used as keepalive timeout
 	s32 attemptCount; // connect/accept attempts
+	u64 lastAttempt; // timestamp to retry again
 	union {
 		SceNetAdhocPdpStat pdp;
 		SceNetAdhocPtpStat ptp;
@@ -550,19 +557,24 @@ typedef struct SceNetAdhocMatchingContext {
 // End of psp definitions
 
 enum {
+	// pspnet_adhoc_auth
+	ERROR_NET_ADHOC_AUTH_ALREADY_INITIALIZED		= 0x80410601,
+
+	// pspnet_adhoc
 	ERROR_NET_ADHOC_INVALID_SOCKET_ID				= 0x80410701,
 	ERROR_NET_ADHOC_INVALID_ADDR					= 0x80410702,
 	ERROR_NET_ADHOC_INVALID_PORT					= 0x80410703,
+	ERROR_NET_ADHOC_INVALID_BUFLEN					= 0x80410704,
 	ERROR_NET_ADHOC_INVALID_DATALEN					= 0x80410705,
-	ERROR_NET_ADHOC_NOT_ENOUGH_SPACE				= 0x80400706,
+	ERROR_NET_ADHOC_NOT_ENOUGH_SPACE				= 0x80400706, // not a typo
 	ERROR_NET_ADHOC_SOCKET_DELETED					= 0x80410707,
 	ERROR_NET_ADHOC_SOCKET_ALERTED					= 0x80410708,
 	ERROR_NET_ADHOC_WOULD_BLOCK						= 0x80410709, //ERROR_NET_ADHOC_NO_DATA_AVAILABLE
 	ERROR_NET_ADHOC_PORT_IN_USE						= 0x8041070a,
 	ERROR_NET_ADHOC_NOT_CONNECTED					= 0x8041070B,
 	ERROR_NET_ADHOC_DISCONNECTED					= 0x8041070c,
-	ERROR_NET_ADHOC_NOT_OPENED						= 0x8040070D,
-	ERROR_NET_ADHOC_NOT_LISTENED					= 0x8040070E,
+	ERROR_NET_ADHOC_NOT_OPENED						= 0x8040070D, // not a typo
+	ERROR_NET_ADHOC_NOT_LISTENED					= 0x8040070E, // not a typo
 	ERROR_NET_ADHOC_SOCKET_ID_NOT_AVAIL				= 0x8041070F,
 	ERROR_NET_ADHOC_PORT_NOT_AVAIL					= 0x80410710,
 	ERROR_NET_ADHOC_INVALID_ARG						= 0x80410711,
@@ -578,7 +590,9 @@ enum {
 	ERROR_NET_ADHOC_NOT_IN_GAMEMODE					= 0x8041071B,
 	ERROR_NET_ADHOC_NOT_CREATED						= 0x8041071C,
 
+	// pspnet_adhoc_matching
 	ERROR_NET_ADHOC_MATCHING_INVALID_MODE			= 0x80410801,
+	ERROR_NET_ADHOC_MATCHING_INVALID_PORT			= 0x80410802,
 	ERROR_NET_ADHOC_MATCHING_INVALID_MAXNUM			= 0x80410803,
 	ERROR_NET_ADHOC_MATCHING_RXBUF_TOO_SHORT		= 0x80410804,
 	ERROR_NET_ADHOC_MATCHING_INVALID_OPTLEN			= 0x80410805,
@@ -602,21 +616,26 @@ enum {
 	ERROR_NET_ADHOC_MATCHING_NOT_ESTABLISHED		= 0x80410817,
 	ERROR_NET_ADHOC_MATCHING_DATA_BUSY				= 0x80410818,
 
+	// pspnet_adhocctl
+	ERROR_NET_ADHOCCTL_NOT_LEFT_IBSS				= 0x80410b01,
+	ERROR_NET_ADHOCCTL_ALREADY_CONNECTED			= 0x80410b02,
 	ERROR_NET_ADHOCCTL_WLAN_SWITCH_OFF				= 0x80410b03,
 	ERROR_NET_ADHOCCTL_INVALID_ARG					= 0x80410B04,
+	ERROR_NET_ADHOCCTL_TIMEOUT						= 0x80410b05,
 	ERROR_NET_ADHOCCTL_ID_NOT_FOUND					= 0x80410B06,
 	ERROR_NET_ADHOCCTL_ALREADY_INITIALIZED			= 0x80410b07,
 	ERROR_NET_ADHOCCTL_NOT_INITIALIZED				= 0x80410b08,
 	ERROR_NET_ADHOCCTL_DISCONNECTED					= 0x80410b09,
+	ERROR_NET_ADHOCCTL_NO_SCAN_INFO					= 0x80410b0a,
+	ERROR_NET_ADHOCCTL_INVALID_IBSS					= 0x80410b0b,
 	ERROR_NET_ADHOCCTL_NOT_ENTER_GAMEMODE			= 0x80410B0C,
 	ERROR_NET_ADHOCCTL_CHANNEL_NOT_AVAILABLE		= 0x80410B0D,
+	ERROR_NET_ADHOCCTL_WLAN_BEACON_LOST				= 0x80410b0e,
+	ERROR_NET_ADHOCCTL_WLAN_SUSPENDED				= 0x80410b0f,
 	ERROR_NET_ADHOCCTL_BUSY							= 0x80410b10,
+	ERROR_NET_ADHOCCTL_CHANNEL_NOT_MATCH			= 0x80410b11,
 	ERROR_NET_ADHOCCTL_TOO_MANY_HANDLERS			= 0x80410b12,
 	ERROR_NET_ADHOCCTL_STACKSIZE_TOO_SHORT			= 0x80410B13,
-
-	ERROR_NET_WLAN_INVALID_ARG						= 0x80410D13,
-
-	ERROR_NET_NO_SPACE								= 0x80410001
 };
 
 const size_t MAX_ADHOCCTL_HANDLERS = 32; //4
@@ -939,12 +958,14 @@ bool isLocalMAC(const SceNetEtherAddr * addr);
 bool isPDPPortInUse(uint16_t port);
 
 /**
- * Check whether PTP Port is in use or not
+ * Check whether PTP Port is in use or not (only sockets with non-Listening state will be considered as in use)
  * @param port To-be-checked Port Number
+ * @param forListen to check for listening or non-listening port
  * @return 1 if in use or... 0
  */
-bool isPTPPortInUse(uint16_t port);
+bool isPTPPortInUse(uint16_t port, bool forListen);
 
+// Convert MAC address to string
 std::string mac2str(SceNetEtherAddr* mac);
 
 /*
