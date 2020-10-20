@@ -34,6 +34,7 @@
 #include "GPU/GPUInterface.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/TextureScalerCommon.h"
+#include "GPU/Common/PresentationCommon.h"
 
 #include "libretro/libretro.h"
 #include "libretro/LibretroGraphicsContext.h"
@@ -318,10 +319,8 @@ static void check_variables(CoreParameter &coreParam)
 
    if (!PSP_IsInited() && ppsspp_internal_resolution.Update(&g_Config.iInternalResolution))
    {
-      coreParam.pixelWidth  = coreParam.renderWidth  = 
-         g_Config.iInternalResolution * 480;
-      coreParam.pixelHeight = coreParam.renderHeight = 
-         g_Config.iInternalResolution * 272;
+      coreParam.pixelWidth  = coreParam.renderWidth  = g_Config.iInternalResolution * 480;
+      coreParam.pixelHeight = coreParam.renderHeight = g_Config.iInternalResolution * 272;
 
       if (gpu)
       {
@@ -358,6 +357,7 @@ void retro_init(void)
    g_Config.iAltSpeedVolume = -1;
    g_Config.bEnableSound = true;
    g_Config.iCwCheatRefreshRate = 60;
+   g_Config.iMemStickSizeGB = 16;
 
    g_Config.iFirmwareVersion = PSP_DEFAULT_FIRMWARE;
    g_Config.iPSPModel = PSP_MODEL_SLIM;
@@ -421,7 +421,7 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    info->geometry.base_height  = g_Config.iInternalResolution * 272;
    info->geometry.max_width    = g_Config.iInternalResolution * 480;
    info->geometry.max_height   = g_Config.iInternalResolution * 272;
-   info->geometry.aspect_ratio = 16.0 / 9.0;
+   info->geometry.aspect_ratio = 480.0 / 272.0;  // Not 16:9! But very, very close.
 }
 
 unsigned retro_api_version(void) { return RETRO_API_VERSION; }
@@ -889,6 +889,11 @@ float System_GetPropertyFloat(SystemProperty prop)
    {
       case SYSPROP_DISPLAY_REFRESH_RATE:
          return 60.f;
+      case SYSPROP_DISPLAY_SAFE_INSET_LEFT:
+      case SYSPROP_DISPLAY_SAFE_INSET_RIGHT:
+      case SYSPROP_DISPLAY_SAFE_INSET_TOP:
+      case SYSPROP_DISPLAY_SAFE_INSET_BOTTOM:
+         return 0.0f;
       default:
          break;
    }

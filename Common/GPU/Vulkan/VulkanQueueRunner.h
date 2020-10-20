@@ -44,7 +44,6 @@ struct VkRenderData {
 	union {
 		struct {
 			VkPipeline pipeline;
-			PipelineFlags flags;
 		} pipeline;
 		struct {
 			VkPipelineLayout pipelineLayout;
@@ -152,6 +151,7 @@ struct VKRStep {
 			VkImageLayout finalColorLayout;
 			VkImageLayout finalDepthStencilLayout;
 			u32 pipelineFlags;
+			VkRect2D renderArea;
 		} render;
 		struct {
 			VKRFramebuffer *src;
