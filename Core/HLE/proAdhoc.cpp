@@ -1340,6 +1340,7 @@ int friendFinder(){
 					INFO_LOG(SCENET, "FriendFinder: Network [RE]Initialized");
 					// At this point we are most-likely not in a Group within the Adhoc Server, so we should probably reset AdhocctlState
 					adhocctlState = ADHOCCTL_STATE_DISCONNECTED;
+					netAdhocGameModeEntered = false;
 				} 
 				else {
 					networkInited = false;

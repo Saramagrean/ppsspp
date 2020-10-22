@@ -65,7 +65,7 @@ bool netAdhocInited;
 bool netAdhocctlInited;
 bool networkInited = false;
 
-bool netAdhocGameModeEntered;
+bool netAdhocGameModeEntered = false;
 
 bool netAdhocMatchingInited;
 int netAdhocMatchingStarted = 0;
@@ -105,6 +105,7 @@ int matchingInputThread(int matchingId);
 int AcceptPtpSocket(int ptpId, int newsocket, sockaddr_in& peeraddr, SceNetEtherAddr* addr, u16_le* port);
 int PollAdhocSocket(SceNetAdhocPollSd* sds, int count, int timeout, int nonblock);
 int FlushPtpSocket(int socketId);
+int NetAdhocGameMode_DeleteMaster();
 int NetAdhocctl_ExitGameMode();
 static int sceNetAdhocPdpSend(int id, const char* mac, u32 port, void* data, int len, int timeout, int flag);
 static int sceNetAdhocPdpRecv(int id, void* addr, void* port, void* buf, void* dataLength, u32 timeout, int flag);
@@ -1030,6 +1031,11 @@ u32 sceNetAdhocInit() {
 	if (!netAdhocInited) {
 		// Library initialized
 		netAdhocInited = true;
+
+		// FIXME: It seems official prx is using sceNetAdhocGameModeDeleteMaster in here?
+		NetAdhocGameMode_DeleteMaster();
+		// Since we are deleting GameMode Master here, we should probably need to make sure GameMode resources all cleared too.
+		deleteAllGMB();
 
 		// Return Success
 		return hleLogSuccessInfoI(SCENET, 0, "at %08x", currentMIPS->pc);
@@ -2271,6 +2277,10 @@ int NetAdhocctl_Term() {
 			friendFinderThread.join();
 		}
 
+		// Clear GameMode resources
+		NetAdhocGameMode_DeleteMaster();
+		deleteAllGMB();
+
 		// Clear Peer List
 		int32_t peercount = 0;
 		freeFriendsRecursive(friends, &peercount);
@@ -2592,7 +2602,7 @@ int NetAdhocctl_CreateEnterGameMode(const char* group_name, int game_type, int n
 	if (!Memory::IsValidAddress(membersAddr))
 		return ERROR_NET_ADHOCCTL_INVALID_ARG;
 
-	if (game_type <= 0 || game_type > 3 || num_members < 2 || num_members > 16 || (game_type == 1 && num_members > 4))
+	if (game_type < ADHOCCTL_GAMETYPE_1A || game_type > ADHOCCTL_GAMETYPE_2A || num_members < 2 || num_members > 16 || (game_type == ADHOCCTL_GAMETYPE_1A && num_members > 4))
 		return ERROR_NET_ADHOCCTL_INVALID_ARG;
 
 	deleteAllGMB();
@@ -4009,23 +4019,27 @@ static int sceNetAdhocGameModeUpdateMaster() {
 	return 0;
 }
 
-static int sceNetAdhocGameModeDeleteMaster() {
-	WARN_LOG(SCENET, "UNTESTED sceNetAdhocGameModeDeleteMaster()");
-	if (isZeroMAC(&masterGameModeArea.mac))
-		return hleLogError(SCENET, ERROR_NET_ADHOC_NOT_CREATED, "not created");
-
+int NetAdhocGameMode_DeleteMaster() {
 	if (masterGameModeArea.data) {
 		free(masterGameModeArea.data);
 	}
-	//sceNetAdhocPdpDelete(masterGameModeArea.socket, 0);
+	//NetAdhocPdp_Delete(masterGameModeArea.socket, 0);
 	masterGameModeArea = { 0 };
-	
+
 	if (replicaGameModeAreas.size() <= 0) {
-		sceNetAdhocPdpDelete(gameModeSocket, 0);
+		NetAdhocPdp_Delete(gameModeSocket, 0);
 		gameModeSocket = (int)INVALID_SOCKET;
 	}
-	
+
 	return 0;
+}
+
+static int sceNetAdhocGameModeDeleteMaster() {
+	WARN_LOG(SCENET, "UNTESTED sceNetAdhocGameModeDeleteMaster() at %08x", currentMIPS->pc);
+	if (isZeroMAC(&masterGameModeArea.mac))
+		return hleLogError(SCENET, ERROR_NET_ADHOC_NOT_CREATED, "not created");
+
+	return NetAdhocGameMode_DeleteMaster();
 }
 
 static int sceNetAdhocGameModeUpdateReplica(int id, u32 infoAddr) {
@@ -4070,7 +4084,7 @@ static int sceNetAdhocGameModeUpdateReplica(int id, u32 infoAddr) {
 }
 
 static int sceNetAdhocGameModeDeleteReplica(int id) {
-	WARN_LOG(SCENET, "UNTESTED sceNetAdhocGameModeDeleteReplica(%i)", id);
+	WARN_LOG(SCENET, "UNTESTED sceNetAdhocGameModeDeleteReplica(%i) at %08x", id, currentMIPS->pc);
 	auto it = std::find_if(replicaGameModeAreas.begin(), replicaGameModeAreas.end(),
 		[id](GameModeArea const& e) {
 			return e.id == id;
@@ -5384,8 +5398,10 @@ const HLEFunction sceNetAdhocMatching[] = {
 };
 
 int NetAdhocctl_ExitGameMode() {
-	if (gameModeSocket > 0)
-		sceNetAdhocPdpDelete(gameModeSocket, 0);
+	if (gameModeSocket > 0) {
+		NetAdhocPdp_Delete(gameModeSocket, 0);
+		gameModeSocket = (int)INVALID_SOCKET;
+	}
 
 	deleteAllGMB();
 
