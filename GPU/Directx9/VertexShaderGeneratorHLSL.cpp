@@ -18,24 +18,18 @@
 #include <cstdio>
 #include <locale.h>
 
-#if defined(_WIN32) && defined(_DEBUG)
-#include "Common/CommonWindows.h"
-#endif
-
 #include "Common/StringUtils.h"
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
 #include "Core/Config.h"
 
-#include "GPU/Directx9/VertexShaderGeneratorDX9.h"
+#include "GPU/Directx9/VertexShaderGeneratorHLSL.h"
 #include "GPU/Common/VertexDecoderCommon.h"
 #include "GPU/Common/ShaderUniforms.h"
 
 #undef WRITE
 
 #define WRITE p+=sprintf
-
-namespace DX9 {
 
 static const char * const boneWeightAttrDecl[9] = {	
 	"#ERROR#",
@@ -49,13 +43,7 @@ static const char * const boneWeightAttrDecl[9] = {
 	"float4 a_w1:TEXCOORD1;\n  float4 a_w2:TEXCOORD2;\n",
 };
 
-enum DoLightComputation {
-	LIGHT_OFF,
-	LIGHT_SHADE,
-	LIGHT_FULL,
-};
-
-void GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage lang) {
+bool GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage lang, std::string *errorString) {
 	char *p = buffer;
 
 	bool isModeThrough = id.Bit(VS_BIT_IS_THROUGH);
@@ -106,6 +94,12 @@ void GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage 
 	if (enableBones) {
 		numBoneWeights = 1 + id.Bits(VS_BIT_BONES, 3);
 	}
+
+	// Output some compatibility defines
+	WRITE(p, "#define vec2 float2\n");
+	WRITE(p, "#define vec3 float3\n");
+	WRITE(p, "#define vec4 float4\n");
+	WRITE(p, "#define splat3(x) float3(x, x, x)\n");
 
 	if (lang == HLSL_DX9) {
 		WRITE(p, "#pragma warning( disable : 3571 )\n");
@@ -429,29 +423,6 @@ void GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage 
 				"a_w2.x", "a_w2.y", "a_w2.z", "a_w2.w",
 			};
 
-#if defined(USE_FOR_LOOP) && defined(USE_BONE_ARRAY)
-
-			// To loop through the weights, we unfortunately need to put them in a float array.
-			// GLSL ES sucks - no way to directly initialize an array!
-			switch (numBoneWeights) {
-			case 1: WRITE(p, "  float w[1]; w[0] = a_w1;\n"); break;
-			case 2: WRITE(p, "  float w[2]; w[0] = a_w1.x; w[1] = a_w1.y;\n"); break;
-			case 3: WRITE(p, "  float w[3]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z;\n"); break;
-			case 4: WRITE(p, "  float w[4]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w;\n"); break;
-			case 5: WRITE(p, "  float w[5]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2;\n"); break;
-			case 6: WRITE(p, "  float w[6]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y;\n"); break;
-			case 7: WRITE(p, "  float w[7]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y; w[6] = a_w2.z;\n"); break;
-			case 8: WRITE(p, "  float w[8]; w[0] = a_w1.x; w[1] = a_w1.y; w[2] = a_w1.z; w[3] = a_w1.w; w[4] = a_w2.x; w[5] = a_w2.y; w[6] = a_w2.z; w[7] = a_w2.w;\n"); break;
-			}
-
-			WRITE(p, "  mat4 skinMatrix = w[0] * u_bone[0];\n");
-			if (numBoneWeights > 1) {
-				WRITE(p, "  for (int i = 1; i < %i; i++) {\n", numBoneWeights);
-				WRITE(p, "    skinMatrix += w[i] * u_bone[i];\n");
-				WRITE(p, "  }\n");
-			}
-
-#else
 			if (lang == HLSL_D3D11 || lang == HLSL_D3D11_LEVEL9) {
 				if (numBoneWeights == 1)
 					WRITE(p, "  float4x3 skinMatrix = mul(In.a_w1, u_bone[0])");
@@ -477,7 +448,6 @@ void GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage 
 					WRITE(p, " + mul(In.%s, u_bone%i)", weightAttr, i);
 				}
 			}
-#endif
 
 			WRITE(p, ";\n");
 
@@ -730,8 +700,9 @@ void GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage 
 				break;
 
 			default:
-				// ILLEGAL
-				break;
+				// Should be unreachable.
+				_assert_(false);
+				return false;
 			}
 		}
 
@@ -756,6 +727,5 @@ void GenerateVertexShaderHLSL(const VShaderID &id, char *buffer, ShaderLanguage 
 
 	WRITE(p, "  return Out;\n");
 	WRITE(p, "}\n");
+	return true;
 }
-
-};
