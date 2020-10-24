@@ -4007,7 +4007,7 @@ static int sceNetAdhocGameModeCreateMaster(u32 dataAddr, int size) {
 		StartGameModeScheduler(size);
 	}
 
-	return 0; // returned an id just like CreateReplica? always return 0?
+	return hleLogDebug(SCENET, 0, "success"); // returned an id just like CreateReplica? always return 0?
 }
 
 /**
@@ -4074,6 +4074,7 @@ static int sceNetAdhocGameModeUpdateMaster() {
 		masterGameModeArea.updateTimestamp = CoreTiming::GetGlobalTimeUsScaled();
 	}
 
+	hleEatMicro(1000);
 	return 0;
 }
 
@@ -4138,6 +4139,7 @@ static int sceNetAdhocGameModeUpdateReplica(int id, u32 infoAddr) {
 		}
 	}
 
+	hleEatMicro(1000);
 	return 0;
 }
 
@@ -5335,6 +5337,9 @@ void __NetTriggerCallbacks()
 			{
 				newState = ADHOCCTL_STATE_GAMEMODE;
 				delayus = adhocEventDelay;
+				// Extra delay to prevent Joining player to progress faster than the Creator on Pocket Pool, but unbalanced delays could cause an issue on Shaun White Snowboarding :(
+				if (adhocConnectionType == ADHOC_JOIN) 
+					delayus += adhocExtraDelay * 3;
 				// Shows player list
 				INFO_LOG(SCENET, "GameMode - All players have joined:");
 				int i = 0;
