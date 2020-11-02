@@ -23,23 +23,10 @@
 #include "Common/GPU/OpenGL/GLRenderManager.h"
 #include "GPU/Common/ShaderCommon.h"
 #include "GPU/Common/ShaderId.h"
-#include "GPU/GLES/VertexShaderGeneratorGLES.h"
-#include "GPU/GLES/FragmentShaderGeneratorGLES.h"
+#include "GPU/Common/VertexShaderGenerator.h"
+#include "GPU/Common/FragmentShaderGenerator.h"
 
 class Shader;
-
-// Pre-fetched attrs and uniforms
-enum {
-	ATTR_POSITION = 0,
-	ATTR_TEXCOORD = 1,
-	ATTR_NORMAL = 2,
-	ATTR_W1 = 3,
-	ATTR_W2 = 4,
-	ATTR_COLOR0 = 5,
-	ATTR_COLOR1 = 6,
-
-	ATTR_COUNT,
-};
 
 class LinkedShader {
 public:
@@ -196,7 +183,7 @@ private:
 	typedef std::vector<LinkedShaderCacheEntry> LinkedShaderCache;
 
 	GLRenderManager *render_;
-	GLSLShaderCompat compat_{};
+	ShaderLanguageDesc compat_;
 	LinkedShaderCache linkedShaderCache_;
 
 	bool lastVShaderSame_;
@@ -204,8 +191,8 @@ private:
 	FShaderID lastFSID_;
 	VShaderID lastVSID_;
 
-	LinkedShader *lastShader_;
-	u64 shaderSwitchDirtyUniforms_;
+	LinkedShader *lastShader_ = nullptr;
+	u64 shaderSwitchDirtyUniforms_ = 0;
 	char *codeBuffer_;
 
 	typedef DenseHashMap<FShaderID, Shader *, nullptr> FSCache;
@@ -214,7 +201,7 @@ private:
 	typedef DenseHashMap<VShaderID, Shader *, nullptr> VSCache;
 	VSCache vsCache_;
 
-	bool diskCacheDirty_;
+	bool diskCacheDirty_ = false;
 	struct {
 		std::vector<VShaderID> vert;
 		std::vector<FShaderID> frag;
