@@ -261,7 +261,6 @@ void FramebufferManagerVulkan::ReformatFramebufferFrom(VirtualFramebuffer *vfb, 
 		// We have to bind here instead of clear, since it can be that no framebuffer is bound.
 		// The backend can sometimes directly optimize it to a clear.
 		draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::CLEAR, Draw::RPAction::KEEP, Draw::RPAction::CLEAR }, "ReformatFramebuffer"); 
-		// draw_->Clear(Draw::FBChannel::FB_COLOR_BIT | Draw::FBChannel::FB_STENCIL_BIT, 0, 0.0f, 0);
 
 		// Need to dirty anything that has command buffer dynamic state, in case we started a new pass above.
 		// Should find a way to feed that information back, maybe... Or simply correct the issue in the rendermanager.
@@ -284,7 +283,7 @@ VkImageView FramebufferManagerVulkan::BindFramebufferAsColorTexture(int stage, V
 	// Currently rendering to this framebuffer. Need to make a copy.
 	if (!skipCopy && framebuffer == currentRenderVfb_) {
 		// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
-		Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight, (Draw::FBColorDepth)framebuffer->colorDepth);
+		Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight);
 		if (renderCopy) {
 			VirtualFramebuffer copyInfo = *framebuffer;
 			copyInfo.fbo = renderCopy;
@@ -339,8 +338,10 @@ void FramebufferManagerVulkan::BlitFramebuffer(VirtualFramebuffer *dst, int dstX
 		return;
 	}
 
-	float srcXFactor = (float)src->renderWidth / (float)src->bufferWidth;
-	float srcYFactor = (float)src->renderHeight / (float)src->bufferHeight;
+	float srcXFactor = (float)src->renderScaleFactor;
+	float srcYFactor = (float)src->renderScaleFactor;
+
+	// Some games use wrong-format block transfers. Simulate that.
 	const int srcBpp = src->format == GE_FORMAT_8888 ? 4 : 2;
 	if (srcBpp != bpp && bpp != 0) {
 		srcXFactor = (srcXFactor * bpp) / srcBpp;
@@ -350,8 +351,8 @@ void FramebufferManagerVulkan::BlitFramebuffer(VirtualFramebuffer *dst, int dstX
 	int srcY1 = srcY * srcYFactor;
 	int srcY2 = (srcY + h) * srcYFactor;
 
-	float dstXFactor = (float)dst->renderWidth / (float)dst->bufferWidth;
-	float dstYFactor = (float)dst->renderHeight / (float)dst->bufferHeight;
+	float dstXFactor = (float)dst->renderScaleFactor;
+	float dstYFactor = (float)dst->renderScaleFactor;
 	const int dstBpp = dst->format == GE_FORMAT_8888 ? 4 : 2;
 	if (dstBpp != bpp && bpp != 0) {
 		dstXFactor = (dstXFactor * bpp) / dstBpp;
@@ -367,15 +368,12 @@ void FramebufferManagerVulkan::BlitFramebuffer(VirtualFramebuffer *dst, int dstX
 		return;
 	}
 
-	// BlitFramebuffer can clip, but CopyFramebufferImage is more restricted.
-	// In case the src goes outside, we just skip the optimization in that case.
 	const bool sameSize = dstX2 - dstX1 == srcX2 - srcX1 && dstY2 - dstY1 == srcY2 - srcY1;
-	const bool sameDepth = dst->colorDepth == src->colorDepth;
 	const bool srcInsideBounds = srcX2 <= src->renderWidth && srcY2 <= src->renderHeight;
 	const bool dstInsideBounds = dstX2 <= dst->renderWidth && dstY2 <= dst->renderHeight;
 	const bool xOverlap = src == dst && srcX2 > dstX1 && srcX1 < dstX2;
 	const bool yOverlap = src == dst && srcY2 > dstY1 && srcY1 < dstY2;
-	if (sameSize && sameDepth && srcInsideBounds && dstInsideBounds && !(xOverlap && yOverlap)) {
+	if (sameSize && srcInsideBounds && dstInsideBounds && !(xOverlap && yOverlap)) {
 		draw_->CopyFramebufferImage(src->fbo, 0, srcX1, srcY1, 0, dst->fbo, 0, dstX1, dstY1, 0, dstX2 - dstX1, dstY2 - dstY1, 1, Draw::FB_COLOR_BIT, "BlitFramebuffer_Copy");
 	} else {
 		draw_->BlitFramebuffer(src->fbo, srcX1, srcY1, srcX2, srcY2, dst->fbo, dstX1, dstY1, dstX2, dstY2, Draw::FB_COLOR_BIT, Draw::FB_BLIT_NEAREST, "BlitFramebuffer_Blit");

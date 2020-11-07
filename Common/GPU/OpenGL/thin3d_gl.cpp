@@ -8,6 +8,7 @@
 #include "Common/Math/math_util.h"
 #include "Common/Math/lin/matrix4x4.h"
 #include "Common/GPU/thin3d.h"
+#include "Common/GPU/Shader.h"
 #include "Common/GPU/OpenGL/DataFormatGL.h"
 #include "Common/GPU/OpenGL/GLCommon.h"
 #include "Common/GPU/OpenGL/GLDebugLog.h"
@@ -213,14 +214,12 @@ public:
 
 GLuint ShaderStageToOpenGL(ShaderStage stage) {
 	switch (stage) {
-	case ShaderStage::VERTEX: return GL_VERTEX_SHADER;
+	case ShaderStage::Vertex: return GL_VERTEX_SHADER;
 #ifndef USING_GLES2
-	case ShaderStage::COMPUTE: return GL_COMPUTE_SHADER;
-	case ShaderStage::EVALUATION: return GL_TESS_EVALUATION_SHADER;
-	case ShaderStage::CONTROL: return GL_TESS_CONTROL_SHADER;
-	case ShaderStage::GEOMETRY: return GL_GEOMETRY_SHADER;
+	case ShaderStage::Compute: return GL_COMPUTE_SHADER;
+	case ShaderStage::Geometry: return GL_GEOMETRY_SHADER;
 #endif
-	case ShaderStage::FRAGMENT:
+	case ShaderStage::Fragment:
 	default:
 		return GL_FRAGMENT_SHADER;
 	}
@@ -254,7 +253,7 @@ public:
 private:
 	GLRenderManager *render_;
 	ShaderStage stage_;
-	ShaderLanguage language_ = ShaderLanguage::GLSL_ES_200;
+	ShaderLanguage language_ = GLSL_1xx;
 	GLRShader *shader_ = nullptr;
 	GLuint glstage_ = 0;
 	std::string source_;  // So we can recompile in case of context loss.
@@ -345,12 +344,18 @@ public:
 		return caps_;
 	}
 	uint32_t GetSupportedShaderLanguages() const override {
-		if (gl_extensions.IsGLES)
-			return (uint32_t)ShaderLanguage::GLSL_ES_200 | (uint32_t)ShaderLanguage::GLSL_ES_300;
-		else
-			return (uint32_t)ShaderLanguage::GLSL_ES_200 | (uint32_t)ShaderLanguage::GLSL_410;
+		if (gl_extensions.GLES3) {
+			return (uint32_t)(ShaderLanguage::GLSL_3xx | ShaderLanguage::GLSL_1xx);
+		} else {
+			return (uint32_t)ShaderLanguage::GLSL_1xx;
+		}
 	}
+
 	uint32_t GetDataFormatSupport(DataFormat fmt) const override;
+
+	void SetErrorCallback(ErrorCallbackFn callback, void *userdata) override {
+		renderManager_.SetErrorCallback(callback, userdata);
+	}
 
 	DepthStencilState *CreateDepthStencilState(const DepthStencilStateDesc &desc) override;
 	BlendState *CreateBlendState(const BlendStateDesc &desc) override;
@@ -597,6 +602,79 @@ OpenGLContext::OpenGLContext() {
 		// TODO: Should this workaround be removed for newer devices/drivers?
 		bugs_.Infest(Bugs::PVR_GENMIPMAP_HEIGHT_GREATER);
 	}
+
+	shaderLanguageDesc_.Init(GLSL_1xx);
+
+	// Detect shader language features.
+	if (gl_extensions.IsGLES) {
+		shaderLanguageDesc_.gles = true;
+		if (gl_extensions.GLES3) {
+			shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_3xx;
+			shaderLanguageDesc_.glslVersionNumber = 300;  // GLSL ES 3.0
+			shaderLanguageDesc_.fragColor0 = "fragColor0";
+			shaderLanguageDesc_.texture = "texture";
+			shaderLanguageDesc_.glslES30 = true;
+			shaderLanguageDesc_.bitwiseOps = true;
+			shaderLanguageDesc_.texelFetch = "texelFetch";
+			shaderLanguageDesc_.varying_vs = "out";
+			shaderLanguageDesc_.varying_fs = "in";
+			shaderLanguageDesc_.attribute = "in";
+		} else {
+			shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_1xx;
+			shaderLanguageDesc_.glslVersionNumber = 100;  // GLSL ES 1.0
+			if (gl_extensions.EXT_gpu_shader4) {
+				shaderLanguageDesc_.bitwiseOps = true;
+				shaderLanguageDesc_.texelFetch = "texelFetch2D";
+			}
+			if (gl_extensions.EXT_blend_func_extended) {
+				// Oldy moldy GLES, so use the fixed output name.
+				shaderLanguageDesc_.fragColor1 = "gl_SecondaryFragColorEXT";
+			}
+		}
+	} else {
+		if (!gl_extensions.ForceGL2 || gl_extensions.IsCoreContext) {
+			if (gl_extensions.VersionGEThan(3, 3, 0)) {
+				shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_3xx;
+				shaderLanguageDesc_.glslVersionNumber = 330;
+				shaderLanguageDesc_.fragColor0 = "fragColor0";
+				shaderLanguageDesc_.texture = "texture";
+				shaderLanguageDesc_.glslES30 = true;
+				shaderLanguageDesc_.bitwiseOps = true;
+				shaderLanguageDesc_.texelFetch = "texelFetch";
+				shaderLanguageDesc_.varying_vs = "out";
+				shaderLanguageDesc_.varying_fs = "in";
+				shaderLanguageDesc_.attribute = "in";
+			} else if (gl_extensions.VersionGEThan(3, 0, 0)) {
+				shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_1xx;
+				shaderLanguageDesc_.glslVersionNumber = 130;
+				shaderLanguageDesc_.fragColor0 = "fragColor0";
+				shaderLanguageDesc_.bitwiseOps = true;
+				shaderLanguageDesc_.texelFetch = "texelFetch";
+			} else {
+				shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_1xx;
+				shaderLanguageDesc_.glslVersionNumber = 110;
+				if (gl_extensions.EXT_gpu_shader4) {
+					shaderLanguageDesc_.bitwiseOps = true;
+					shaderLanguageDesc_.texelFetch = "texelFetch2D";
+				}
+			}
+		}
+	}
+
+	if (gl_extensions.IsGLES && gl_extensions.GLES3) {
+		caps_.framebufferFetchSupported = (gl_extensions.EXT_shader_framebuffer_fetch || gl_extensions.NV_shader_framebuffer_fetch || gl_extensions.ARM_shader_framebuffer_fetch);
+		if (gl_extensions.EXT_shader_framebuffer_fetch) {
+			shaderLanguageDesc_.framebufferFetchExtension = "#extension GL_EXT_shader_framebuffer_fetch : require";
+			shaderLanguageDesc_.lastFragData = "gl_LastFragData[0]";
+		} else if (gl_extensions.NV_shader_framebuffer_fetch) {
+			// GL_NV_shader_framebuffer_fetch is available on mobile platform and ES 2.0 only but not on desktop.
+			shaderLanguageDesc_.framebufferFetchExtension = "#extension GL_NV_shader_framebuffer_fetch : require";
+			shaderLanguageDesc_.lastFragData = "gl_LastFragData[0]";
+		} else if (gl_extensions.ARM_shader_framebuffer_fetch) {
+			shaderLanguageDesc_.framebufferFetchExtension = "#extension GL_ARM_shader_framebuffer_fetch : require";
+			shaderLanguageDesc_.lastFragData = "gl_LastFragColorARM";
+		}
+	}
 }
 
 OpenGLContext::~OpenGLContext() {
@@ -731,15 +809,16 @@ OpenGLTexture::~OpenGLTexture() {
 
 class OpenGLFramebuffer : public Framebuffer {
 public:
-	OpenGLFramebuffer(GLRenderManager *render) : render_(render) {}
+	OpenGLFramebuffer(GLRenderManager *render, GLRFramebuffer *framebuffer) : render_(render), framebuffer_(framebuffer) {
+		width_ = framebuffer->width;
+		height_ = framebuffer->height;
+	}
 	~OpenGLFramebuffer() {
-		render_->DeleteFramebuffer(framebuffer);
+		render_->DeleteFramebuffer(framebuffer_);
 	}
 
 	GLRenderManager *render_;
-	GLRFramebuffer *framebuffer = nullptr;
-
-	FBColorDepth colorDepth = FBO_8888;
+	GLRFramebuffer *framebuffer_ = nullptr;
 };
 
 // TODO: SSE/NEON optimize, and move to ColorConv.cpp.
@@ -841,7 +920,7 @@ bool OpenGLContext::CopyFramebufferToMemorySync(Framebuffer *src, int channelBit
 		aspect |= GL_DEPTH_BUFFER_BIT;
 	if (channelBits & FB_STENCIL_BIT)
 		aspect |= GL_STENCIL_BUFFER_BIT;
-	renderManager_.CopyFramebufferToMemorySync(fb ? fb->framebuffer : nullptr, aspect, x, y, w, h, dataFormat, (uint8_t *)pixels, pixelStride, tag);
+	renderManager_.CopyFramebufferToMemorySync(fb ? fb->framebuffer_ : nullptr, aspect, x, y, w, h, dataFormat, (uint8_t *)pixels, pixelStride, tag);
 	return true;
 }
 
@@ -1237,8 +1316,8 @@ void OpenGLInputLayout::Compile(const InputLayoutDesc &desc) {
 Framebuffer *OpenGLContext::CreateFramebuffer(const FramebufferDesc &desc) {
 	CheckGLExtensions();
 
-	OpenGLFramebuffer *fbo = new OpenGLFramebuffer(&renderManager_);
-	fbo->framebuffer = renderManager_.CreateFramebuffer(desc.width, desc.height, desc.z_stencil);
+	GLRFramebuffer *framebuffer = renderManager_.CreateFramebuffer(desc.width, desc.height, desc.z_stencil);
+	OpenGLFramebuffer *fbo = new OpenGLFramebuffer(&renderManager_, framebuffer);
 	return fbo;
 }
 
@@ -1248,7 +1327,7 @@ void OpenGLContext::BindFramebufferAsRenderTarget(Framebuffer *fbo, const Render
 	GLRRenderPassAction depth = (GLRRenderPassAction)rp.depth;
 	GLRRenderPassAction stencil = (GLRRenderPassAction)rp.stencil;
 
-	renderManager_.BindFramebufferAsRenderTarget(fb ? fb->framebuffer : nullptr, color, depth, stencil, rp.clearColor, rp.clearDepth, rp.clearStencil, tag);
+	renderManager_.BindFramebufferAsRenderTarget(fb ? fb->framebuffer_ : nullptr, color, depth, stencil, rp.clearColor, rp.clearDepth, rp.clearStencil, tag);
 }
 
 void OpenGLContext::CopyFramebufferImage(Framebuffer *fbsrc, int srcLevel, int srcX, int srcY, int srcZ, Framebuffer *fbdst, int dstLevel, int dstX, int dstY, int dstZ, int width, int height, int depth, int channelBits, const char *tag) {
@@ -1264,7 +1343,7 @@ void OpenGLContext::CopyFramebufferImage(Framebuffer *fbsrc, int srcLevel, int s
 		if (channelBits & FB_STENCIL_BIT)
 			aspect |= GL_STENCIL_BUFFER_BIT;
 	}
-	renderManager_.CopyFramebuffer(src->framebuffer, GLRect2D{ srcX, srcY, width, height }, dst->framebuffer, GLOffset2D{ dstX, dstY }, aspect, tag);
+	renderManager_.CopyFramebuffer(src->framebuffer_, GLRect2D{ srcX, srcY, width, height }, dst->framebuffer_, GLOffset2D{ dstX, dstY }, aspect, tag);
 }
 
 bool OpenGLContext::BlitFramebuffer(Framebuffer *fbsrc, int srcX1, int srcY1, int srcX2, int srcY2, Framebuffer *fbdst, int dstX1, int dstY1, int dstX2, int dstY2, int channels, FBBlitFilter linearFilter, const char *tag) {
@@ -1278,7 +1357,7 @@ bool OpenGLContext::BlitFramebuffer(Framebuffer *fbsrc, int srcX1, int srcY1, in
 	if (channels & FB_STENCIL_BIT)
 		aspect |= GL_STENCIL_BUFFER_BIT;
 
-	renderManager_.BlitFramebuffer(src->framebuffer, GLRect2D{ srcX1, srcY1, srcX2 - srcX1, srcY2 - srcY1 }, dst->framebuffer, GLRect2D{ dstX1, dstY1, dstX2 - dstX1, dstY2 - dstY1 }, aspect, linearFilter == FB_BLIT_LINEAR, tag);
+	renderManager_.BlitFramebuffer(src->framebuffer_, GLRect2D{ srcX1, srcY1, srcX2 - srcX1, srcY2 - srcY1 }, dst->framebuffer_, GLRect2D{ dstX1, dstY1, dstX2 - dstX1, dstY2 - dstY1 }, aspect, linearFilter == FB_BLIT_LINEAR, tag);
 	return true;
 }
 
@@ -1292,14 +1371,14 @@ void OpenGLContext::BindFramebufferAsTexture(Framebuffer *fbo, int binding, FBCh
 		aspect |= GL_DEPTH_BUFFER_BIT;
 	if (channelBit & FB_STENCIL_BIT)
 		aspect |= GL_STENCIL_BUFFER_BIT;
-	renderManager_.BindFramebufferAsTexture(fb->framebuffer, binding, aspect, color);
+	renderManager_.BindFramebufferAsTexture(fb->framebuffer_, binding, aspect, color);
 }
 
 void OpenGLContext::GetFramebufferDimensions(Framebuffer *fbo, int *w, int *h) {
 	OpenGLFramebuffer *fb = (OpenGLFramebuffer *)fbo;
 	if (fb) {
-		*w = fb->framebuffer->width;
-		*h = fb->framebuffer->height;
+		*w = fb->Width();
+		*h = fb->Height();
 	} else {
 		*w = targetWidth_;
 		*h = targetHeight_;

@@ -61,25 +61,26 @@ struct VirtualFramebuffer {
 	u16 width;
 	u16 height;
 
-	// renderWidth/renderHeight: The scaled size we render at. May be scaled to render at higher resolutions.
-	// The physical buffer may be larger than renderWidth/renderHeight.
-	u16 renderWidth;
-	u16 renderHeight;
-
-	// bufferWidth/bufferHeight: The pre-scaling size of the buffer itself. May only be bigger than width/height.
+	// bufferWidth/bufferHeight: The pre-scaling size of the buffer itself. May only be bigger than or equal to width/height.
 	// Actual physical buffer is this size times the render resolution multiplier.
 	// The buffer may be used to render a width or height from 0 to these values without being recreated.
 	u16 bufferWidth;
 	u16 bufferHeight;
 
+	// renderWidth/renderHeight: The scaled size we render at. May be scaled to render at higher resolutions.
+	// The physical buffer may be larger than renderWidth/renderHeight.
+	u16 renderWidth;
+	u16 renderHeight;
+
+	float renderScaleFactor;
+
 	u16 usageFlags;
 
 	u16 newWidth;
 	u16 newHeight;
+
 	int lastFrameNewSize;
 
-	// TODO: Handle fbo and colorDepth better.
-	u8 colorDepth;
 	Draw::Framebuffer *fbo;
 
 	u16 drawnWidth;
@@ -304,7 +305,7 @@ public:
 	virtual void Resized();
 	virtual void DestroyAllFBOs();
 
-	Draw::Framebuffer *GetTempFBO(TempFBO reason, u16 w, u16 h, Draw::FBColorDepth colorDepth = Draw::FBO_8888);
+	Draw::Framebuffer *GetTempFBO(TempFBO reason, u16 w, u16 h);
 
 	// Debug features
 	virtual bool GetFramebuffer(u32 fb_address, int fb_stride, GEBufferFormat format, GPUDebugBuffer &buffer, int maxRes);
@@ -349,11 +350,9 @@ protected:
 	void DownloadFramebufferOnSwitch(VirtualFramebuffer *vfb);
 	void FindTransferFramebuffers(VirtualFramebuffer *&dstBuffer, VirtualFramebuffer *&srcBuffer, u32 dstBasePtr, int dstStride, int &dstX, int &dstY, u32 srcBasePtr, int srcStride, int &srcX, int &srcY, int &srcWidth, int &srcHeight, int &dstWidth, int &dstHeight, int bpp);
 	VirtualFramebuffer *FindDownloadTempBuffer(VirtualFramebuffer *vfb);
-	virtual bool CreateDownloadTempBuffer(VirtualFramebuffer *nvfb);
 	virtual void UpdateDownloadTempBuffer(VirtualFramebuffer *nvfb) = 0;
 
 	VirtualFramebuffer *CreateRAMFramebuffer(uint32_t fbAddress, int width, int height, int stride, GEBufferFormat format);
-	void OptimizeDownloadRange(VirtualFramebuffer *vfb, int &x, int &y, int &w, int &h);
 
 	void UpdateFramebufUsage(VirtualFramebuffer *vfb);
 
@@ -400,9 +399,10 @@ protected:
 
 	bool gameUsesSequentialCopies_ = false;
 
-	// Sampled in BeginFrame for safety.
+	// Sampled in BeginFrame/UpdateSize for safety.
 	float renderWidth_ = 0.0f;
 	float renderHeight_ = 0.0f;
+	float renderScaleFactor_ = 1.0f;
 	int pixelWidth_;
 	int pixelHeight_;
 	int bloomHack_ = 0;

@@ -355,7 +355,7 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 		}
 		if (!skipCopy && framebuffer == currentRenderVfb_) {
 			// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
-			Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight, (Draw::FBColorDepth)framebuffer->colorDepth);
+			Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight);
 			if (renderCopy) {
 				VirtualFramebuffer copyInfo = *framebuffer;
 				copyInfo.fbo = renderCopy;
@@ -383,8 +383,8 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 			return;
 		}
 
-		float srcXFactor = (float)src->renderWidth / (float)src->bufferWidth;
-		float srcYFactor = (float)src->renderHeight / (float)src->bufferHeight;
+		float srcXFactor = (float)src->renderScaleFactor;
+		float srcYFactor = (float)src->renderScaleFactor;
 		const int srcBpp = src->format == GE_FORMAT_8888 ? 4 : 2;
 		if (srcBpp != bpp && bpp != 0) {
 			srcXFactor = (srcXFactor * bpp) / srcBpp;
@@ -394,8 +394,8 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 		int srcY1 = srcY * srcYFactor;
 		int srcY2 = (srcY + h) * srcYFactor;
 
-		float dstXFactor = (float)dst->renderWidth / (float)dst->bufferWidth;
-		float dstYFactor = (float)dst->renderHeight / (float)dst->bufferHeight;
+		float dstXFactor = (float)dst->renderScaleFactor;
+		float dstYFactor = (float)dst->renderScaleFactor;
 		const int dstBpp = dst->format == GE_FORMAT_8888 ? 4 : 2;
 		if (dstBpp != bpp && bpp != 0) {
 			dstXFactor = (dstXFactor * bpp) / dstBpp;
@@ -408,7 +408,7 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 		// Direct3D 9 doesn't support rect -> self.
 		Draw::Framebuffer *srcFBO = src->fbo;
 		if (src == dst) {
-			Draw::Framebuffer *tempFBO = GetTempFBO(TempFBO::BLIT, src->renderWidth, src->renderHeight, (Draw::FBColorDepth)src->colorDepth);
+			Draw::Framebuffer *tempFBO = GetTempFBO(TempFBO::BLIT, src->renderWidth, src->renderHeight);
 			bool result = draw_->BlitFramebuffer(
 				src->fbo, srcX1, srcY1, srcX2, srcY2,
 				tempFBO, dstX1, dstY1, dstX2, dstY2,
@@ -606,7 +606,7 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 				// Let's resize.  We must stretch to a render target first.
 				w = vfb->width * maxRes;
 				h = vfb->height * maxRes;
-				tempFBO = draw_->CreateFramebuffer({ w, h, 1, 1, false, Draw::FBO_8888 });
+				tempFBO = draw_->CreateFramebuffer({ w, h, 1, 1, false });
 				if (draw_->BlitFramebuffer(vfb->fbo, 0, 0, vfb->renderWidth, vfb->renderHeight, tempFBO, 0, 0, w, h, Draw::FB_COLOR_BIT, g_Config.iBufFilter == SCALE_LINEAR ? Draw::FB_BLIT_LINEAR : Draw::FB_BLIT_NEAREST, "GetFramebuffer")) {
 					renderTarget = (LPDIRECT3DSURFACE9)draw_->GetFramebufferAPITexture(tempFBO, Draw::FB_COLOR_BIT | Draw::FB_SURFACE_BIT, 0);
 				}

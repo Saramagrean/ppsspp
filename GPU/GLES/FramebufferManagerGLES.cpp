@@ -105,7 +105,7 @@ FramebufferManagerGLES::FramebufferManagerGLES(Draw::DrawContext *draw, GLRender
 	needGLESRebinds_ = true;
 	CreateDeviceObjects();
 	render_ = (GLRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
-	presentation_->SetLanguage(gl_extensions.IsCoreContext ? GLSL_300 : GLSL_140);
+	presentation_->SetLanguage(gl_extensions.IsCoreContext ? GLSL_3xx : GLSL_1xx);
 }
 
 void FramebufferManagerGLES::Init() {
@@ -278,7 +278,7 @@ void FramebufferManagerGLES::BindFramebufferAsColorTexture(int stage, VirtualFra
 	}
 	if (!skipCopy && framebuffer == currentRenderVfb_) {
 		// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
-		Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight, (Draw::FBColorDepth)framebuffer->colorDepth);
+		Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight);
 		if (renderCopy) {
 			VirtualFramebuffer copyInfo = *framebuffer;
 			copyInfo.fbo = renderCopy;
@@ -315,8 +315,8 @@ void FramebufferManagerGLES::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, 
 
 	bool useBlit = gstate_c.Supports(GPU_SUPPORTS_FRAMEBUFFER_BLIT);
 
-	float srcXFactor = useBlit ? (float)src->renderWidth / (float)src->bufferWidth : 1.0f;
-	float srcYFactor = useBlit ? (float)src->renderHeight / (float)src->bufferHeight : 1.0f;
+	float srcXFactor = useBlit ? src->renderScaleFactor : 1.0f;
+	float srcYFactor = useBlit ? src->renderScaleFactor : 1.0f;
 	const int srcBpp = src->format == GE_FORMAT_8888 ? 4 : 2;
 	if (srcBpp != bpp && bpp != 0) {
 		srcXFactor = (srcXFactor * bpp) / srcBpp;
@@ -326,8 +326,8 @@ void FramebufferManagerGLES::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, 
 	int srcY1 = srcY * srcYFactor;
 	int srcY2 = (srcY + h) * srcYFactor;
 
-	float dstXFactor = useBlit ? (float)dst->renderWidth / (float)dst->bufferWidth : 1.0f;
-	float dstYFactor = useBlit ? (float)dst->renderHeight / (float)dst->bufferHeight : 1.0f;
+	float dstXFactor = useBlit ? dst->renderScaleFactor : 1.0f;
+	float dstYFactor = useBlit ? dst->renderScaleFactor : 1.0f;
 	const int dstBpp = dst->format == GE_FORMAT_8888 ? 4 : 2;
 	if (dstBpp != bpp && bpp != 0) {
 		dstXFactor = (dstXFactor * bpp) / dstBpp;
@@ -347,12 +347,11 @@ void FramebufferManagerGLES::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, 
 		// glBlitFramebuffer can clip, but glCopyImageSubData is more restricted.
 		// In case the src goes outside, we just skip the optimization in that case.
 		const bool sameSize = dstX2 - dstX1 == srcX2 - srcX1 && dstY2 - dstY1 == srcY2 - srcY1;
-		const bool sameDepth = dst->colorDepth == src->colorDepth;
 		const bool srcInsideBounds = srcX2 <= src->renderWidth && srcY2 <= src->renderHeight;
 		const bool dstInsideBounds = dstX2 <= dst->renderWidth && dstY2 <= dst->renderHeight;
 		const bool xOverlap = src == dst && srcX2 > dstX1 && srcX1 < dstX2;
 		const bool yOverlap = src == dst && srcY2 > dstY1 && srcY1 < dstY2;
-		if (sameSize && sameDepth && srcInsideBounds && dstInsideBounds && !(xOverlap && yOverlap)) {
+		if (sameSize && srcInsideBounds && dstInsideBounds && !(xOverlap && yOverlap)) {
 			draw_->CopyFramebufferImage(src->fbo, 0, srcX1, srcY1, 0, dst->fbo, 0, dstX1, dstY1, 0, dstX2 - dstX1, dstY2 - dstY1, 1, Draw::FB_COLOR_BIT, "BlitFramebuffer");
 			return;
 		}
@@ -361,6 +360,8 @@ void FramebufferManagerGLES::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, 
 	if (useBlit) {
 		draw_->BlitFramebuffer(src->fbo, srcX1, srcY1, srcX2, srcY2, dst->fbo, dstX1, dstY1, dstX2, dstY2, Draw::FB_COLOR_BIT, Draw::FB_BLIT_NEAREST, "BlitFramebuffer");
 	} else {
+		// TODO: Move this workaround out into thin3d, instead of dirtying up the code here.
+
 		draw_->BindFramebufferAsRenderTarget(dst->fbo, { Draw::RPAction::KEEP, Draw::RPAction::KEEP, Draw::RPAction::KEEP }, "BlitFramebuffer");
 		draw_->BindFramebufferAsTexture(src->fbo, 0, Draw::FB_COLOR_BIT, 0);
 
@@ -377,7 +378,7 @@ void FramebufferManagerGLES::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, 
 		float srcW = src->bufferWidth;
 		float srcH = src->bufferHeight;
 		render_->BindProgram(draw2dprogram_);
-		DrawActiveTexture(dstX1, dstY1, w * dstXFactor, h, dst->bufferWidth, dst->bufferHeight, srcX1 / srcW, srcY1 / srcH, srcX2 / srcW, srcY2 / srcH, ROTATION_LOCKED_HORIZONTAL, DRAWTEX_NEAREST);
+		DrawActiveTexture(dstX1, dstY1, w * dstXFactor, h * dstYFactor, dst->bufferWidth, dst->bufferHeight, srcX1 / srcW, srcY1 / srcH, srcX2 / srcW, srcY2 / srcH, ROTATION_LOCKED_HORIZONTAL, DRAWTEX_NEAREST);
 		textureCacheGL_->ForgetLastTexture();
 	}
 
