@@ -80,6 +80,12 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool doFlatShading = id.Bit(FS_BIT_FLATSHADE);
 	bool shaderDepal = id.Bit(FS_BIT_SHADER_DEPAL);
 	bool bgraTexture = id.Bit(FS_BIT_BGRA_TEXTURE);
+	bool colorWriteMask = id.Bit(FS_BIT_COLOR_WRITEMASK);
+
+	if (colorWriteMask && !compat.bitwiseOps) {
+		*errorString = "Color Write Mask requires bitwise ops";
+		return false;
+	}
 
 	GEComparison alphaTestFunc = (GEComparison)id.Bits(FS_BIT_ALPHA_TEST_FUNC, 3);
 	GEComparison colorTestFunc = (GEComparison)id.Bits(FS_BIT_COLOR_TEST_FUNC, 2);
@@ -104,6 +110,17 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool earlyFragmentTests = ((!enableAlphaTest && !enableColorTest) || testForceToZero) && !gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool useAdrenoBugWorkaround = id.Bit(FS_BIT_NO_DEPTH_CANNOT_DISCARD_STENCIL);
 
+	bool readFramebuffer = replaceBlend == REPLACE_BLEND_COPY_FBO || colorWriteMask;
+	bool readFramebufferTex = readFramebuffer && !gstate_c.Supports(GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH);
+
+	bool needFragCoord = readFramebuffer || gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
+	bool writeDepth = gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
+
+	if (readFramebuffer && compat.shaderLanguage == HLSL_D3D9) {
+		*errorString = "Framebuffer read not yet supported in HLSL D3D9";
+		return false;
+	}
+
 	if (compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) {
 		if (earlyFragmentTests) {
 			WRITE(p, "layout (early_fragment_tests) in;\n");
@@ -116,10 +133,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "layout (binding = 0) uniform sampler2D tex;\n");
 		}
 
-		if (!isModeClear && replaceBlend > REPLACE_BLEND_STANDARD) {
-			if (replaceBlend == REPLACE_BLEND_COPY_FBO) {
-				WRITE(p, "layout (binding = 1) uniform sampler2D fbotex;\n");
-			}
+		if (readFramebufferTex) {
+			WRITE(p, "layout (binding = 1) uniform sampler2D fbotex;\n");
 		}
 
 		if (shaderDepal) {
@@ -151,11 +166,13 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (compat.shaderLanguage == HLSL_D3D9) {
 			if (doTexture)
 				WRITE(p, "sampler tex : register(s0);\n");
-			if (!isModeClear && replaceBlend > REPLACE_BLEND_STANDARD) {
-				if (replaceBlend == REPLACE_BLEND_COPY_FBO) {
-					WRITE(p, "vec2 u_fbotexSize : register(c%i);\n", CONST_PS_FBOTEXSIZE);
-					WRITE(p, "sampler fbotex : register(s1);\n");
-				}
+
+			if (readFramebufferTex) {
+				WRITE(p, "vec2 u_fbotexSize : register(c%i);\n", CONST_PS_FBOTEXSIZE);
+				WRITE(p, "sampler fbotex : register(s1);\n");
+			}
+
+			if (replaceBlend > REPLACE_BLEND_STANDARD) {
 				if (replaceBlendFuncA >= GE_SRCBLEND_FIXA) {
 					WRITE(p, "float3 u_blendFixA : register(c%i);\n", CONST_PS_BLENDFIXA);
 				}
@@ -186,11 +203,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		} else {
 			WRITE(p, "SamplerState samp : register(s0);\n");
 			WRITE(p, "Texture2D<vec4> tex : register(t0);\n");
-			if (!isModeClear && replaceBlend > REPLACE_BLEND_STANDARD) {
-				if (replaceBlend == REPLACE_BLEND_COPY_FBO) {
-					// No sampler required, we Load
-					WRITE(p, "Texture2D<vec4> fboTex : register(t1);\n");
-				}
+			if (readFramebufferTex) {
+				// No sampler required, we Load
+				WRITE(p, "Texture2D<vec4> fboTex : register(t1);\n");
 			}
 			WRITE(p, "cbuffer base : register(b0) {\n%s};\n", ub_baseStr);
 		}
@@ -205,7 +220,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		if (enableColorTest) {
 			if (compat.shaderLanguage == HLSL_D3D11) {
-				WRITE(p, "uvec3 roundAndScaleTo255iv(float3 x) { return uvec3(floor(x * 255.0f + 0.5f)); }\n");
+				WRITE(p, "uvec3 roundAndScaleTo255iv(float3 x) { return (floor(x * 255.0f + 0.5f)); }\n");
 			} else {
 				WRITE(p, "vec3 roundAndScaleTo255v(float3 x) { return floor(x * 255.0f + 0.5f); }\n");
 			}
@@ -223,7 +238,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (enableFog) {
 			WRITE(p, "  float v_fogdepth: TEXCOORD1;\n");
 		}
-		if (compat.shaderLanguage == HLSL_D3D11 && ((replaceBlend == REPLACE_BLEND_COPY_FBO) || gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT))) {
+		if (compat.shaderLanguage == HLSL_D3D11 && needFragCoord) {
 			WRITE(p, "  vec4 pixelPos : SV_POSITION;\n");
 		}
 		WRITE(p, "};\n");
@@ -236,19 +251,19 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			} else {
 				WRITE(p, "  vec4 target : SV_Target;\n");
 			}
-			if (gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT)) {
-				WRITE(p, "  float depth : SV_DEPTH;\n");
+			if (writeDepth) {
+				WRITE(p, "  float depth : SV_Depth;\n");
 			}
 			WRITE(p, "};\n");
 		}
 	} else if (compat.shaderLanguage == HLSL_D3D9) {
 		if (doTexture)
 			WRITE(p, "sampler tex : register(s0);\n");
-		if (!isModeClear && replaceBlend > REPLACE_BLEND_STANDARD) {
-			if (replaceBlend == REPLACE_BLEND_COPY_FBO) {
-				WRITE(p, "vec2 u_fbotexSize : register(c%i);\n", CONST_PS_FBOTEXSIZE);
-				WRITE(p, "sampler fbotex : register(s1);\n");
-			}
+		if (readFramebufferTex) {
+			WRITE(p, "vec2 u_fbotexSize : register(c%i);\n", CONST_PS_FBOTEXSIZE);
+			WRITE(p, "sampler fbotex : register(s1);\n");
+		}
+		if (replaceBlend > REPLACE_BLEND_STANDARD) {
 			if (replaceBlendFuncA >= GE_SRCBLEND_FIXA) {
 				WRITE(p, "float3 u_blendFixA : register(c%i);\n", CONST_PS_BLENDFIXA);
 			}
@@ -276,7 +291,6 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (enableFog) {
 			WRITE(p, "float3 u_fogcolor : register(c%i);\n", CONST_PS_FOGCOLOR);
 		}
-
 	} else if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		if (shaderDepal && gl_extensions.IsGLES) {
 			WRITE(p, "precision highp int;\n");
@@ -285,14 +299,15 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (doTexture)
 			WRITE(p, "uniform sampler2D tex;\n");
 
+		if (readFramebufferTex) {
+			if (!compat.texelFetch) {
+				WRITE(p, "uniform vec2 u_fbotexSize;\n");
+			}
+			WRITE(p, "uniform sampler2D fbotex;\n");
+		}
+
 		if (!isModeClear && replaceBlend > REPLACE_BLEND_STANDARD) {
 			*uniformMask |= DIRTY_SHADERBLEND;
-			if (!gstate_c.Supports(GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH) && replaceBlend == REPLACE_BLEND_COPY_FBO) {
-				if (!compat.texelFetch) {
-					WRITE(p, "uniform vec2 u_fbotexSize;\n");
-				}
-				WRITE(p, "uniform sampler2D fbotex;\n");
-			}
 			if (replaceBlendFuncA >= GE_SRCBLEND_FIXA) {
 				WRITE(p, "uniform vec3 u_blendFixA;\n");
 			}
@@ -324,8 +339,13 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 		if (shaderDepal) {
 			WRITE(p, "uniform sampler2D pal;\n");
-			WRITE(p, "uniform int u_depal_mask_shift_off_fmt;\n");
+			WRITE(p, "uniform uint u_depal_mask_shift_off_fmt;\n");
 			*uniformMask |= DIRTY_DEPAL;
+		}
+
+		if (colorWriteMask) {
+			WRITE(p, "uniform uint u_colorWriteMask;\n");
+			*uniformMask |= DIRTY_COLORWRITEMASK;
 		}
 
 		if (stencilToAlpha && replaceAlphaWithStencilType == STENCIL_VALUE_UNIFORM) {
@@ -386,6 +406,20 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	}
 
+	// Provide implementations of packUnorm4x8 and unpackUnorm4x8 if not available.
+	if (colorWriteMask && compat.shaderLanguage == HLSL_D3D11 || (compat.shaderLanguage == GLSL_3xx && compat.glslVersionNumber < 400)) {
+		WRITE(p, "uint packUnorm4x8(vec4 v) {\n");
+		WRITE(p, "  v = clamp(v, 0.0, 1.0);\n");
+		WRITE(p, "  uvec4 u = uvec4(255.0 * v);\n");
+		WRITE(p, "  return u.x | (u.y << 8) | (u.z << 16) | (u.w << 24);\n");
+		WRITE(p, "}\n");
+
+		WRITE(p, "vec4 unpackUnorm4x8(uint x) {\n");
+		WRITE(p, "  uvec4 u = uvec4(x & 0xFFU, (x >> 8) & 0xFFU, (x >> 16) & 0xFFU, (x >> 24) & 0xFFU);\n");
+		WRITE(p, "  return vec4(u) * (1.0 / 255.0);\n");
+		WRITE(p, "}\n");
+	}
+
 	// PowerVR needs a custom modulo function. For some reason, this has far higher precision than the builtin one.
 	if ((gl_extensions.bugs & BUG_PVR_SHADER_PRECISION_BAD) && needShaderTexClamp) {
 		WRITE(p, "float mymod(float a, float b) { return a - b * floor(a / b); }\n");
@@ -393,9 +427,16 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "PS_OUT main( PS_IN In ) {\n");
-		WRITE(p, "  PS_OUT outfragment;\n");		
+		WRITE(p, "  PS_OUT outfragment;\n");
+		if (needFragCoord) {
+			WRITE(p, "  vec4 gl_FragCoord = In.pixelPos;\n");
+		}
+		if (writeDepth) {
+			WRITE(p, "  float gl_FragDepth;\n");
+		}
 	} else if (compat.shaderLanguage == HLSL_D3D9) {
 		WRITE(p, "vec4 main( PS_IN In ) : COLOR {\n");
+		WRITE(p, "  vec4 target;\n");
 	} else {
 		WRITE(p, "void main() {\n");
 	}
@@ -409,6 +450,21 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		if (doTexture) {
 			WRITE(p, "  vec3 v_texcoord = In.v_texcoord;\n");
+		}
+	}
+
+	// Two things read from the old framebuffer - shader replacement blending and bit-level masking.
+	if (readFramebuffer) {
+		if (compat.shaderLanguage == HLSL_D3D11) {
+			WRITE(p, "  vec4 destColor = fboTex.Load(int3((int)gl_FragCoord.x, (int)gl_FragCoord.y, 0));\n");
+		} else if (gstate_c.Supports(GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH)) {
+			// If we have EXT_shader_framebuffer_fetch / ARM_shader_framebuffer_fetch, we skip the blit.
+			// We can just read the prev value more directly.
+			WRITE(p, "  lowp vec4 destColor = %s;\n", compat.lastFragData);
+		} else if (!compat.texelFetch) {
+			WRITE(p, "  lowp vec4 destColor = %s(fbotex, gl_FragCoord.xy * u_fbotexSize.xy);\n", compat.texture);
+		} else {
+			WRITE(p, "  lowp vec4 destColor = %s(fbotex, ivec2(gl_FragCoord.x, gl_FragCoord.y), 0);\n", compat.texelFetch);
 		}
 	}
 
@@ -798,19 +854,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "  v.rgb = v.rgb * %s;\n", srcFactor);
 		}
 
-		if (replaceBlend == REPLACE_BLEND_COPY_FBO && compat.shaderLanguage != HLSL_D3D9) {
-			// If we have NV_shader_framebuffer_fetch / EXT_shader_framebuffer_fetch, we skip the blit.
-			// We can just read the prev value more directly.
-			if (compat.shaderLanguage == HLSL_D3D11) {
-				WRITE(p, "  vec4 destColor = fboTex.Load(int3((int)In.pixelPos.x, (int)In.pixelPos.y, 0));\n");
-			} else if (gstate_c.Supports(GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH)) {
-				WRITE(p, "  lowp vec4 destColor = %s;\n", compat.lastFragData);
-			} else if (!compat.texelFetch) {
-				WRITE(p, "  lowp vec4 destColor = %s(fbotex, gl_FragCoord.xy * u_fbotexSize.xy);\n", compat.texture);
-			} else {
-				WRITE(p, "  lowp vec4 destColor = %s(fbotex, ivec2(gl_FragCoord.x, gl_FragCoord.y), 0);\n", compat.texelFetch);
-			}
-
+		if (replaceBlend == REPLACE_BLEND_COPY_FBO) {
 			const char *srcFactor = nullptr;
 			const char *dstFactor = nullptr;
 
@@ -869,7 +913,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 
 		if (replaceBlend == REPLACE_BLEND_2X_ALPHA || replaceBlend == REPLACE_BLEND_PRE_SRC_2X_ALPHA) {
-			WRITE(p, "  v.a = v.a * 2.0;\n");
+			WRITE(p, "  v.a *= 2.0;\n");
 		}
 	}
 
@@ -910,15 +954,16 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	switch (stencilToAlpha) {
 	case REPLACE_ALPHA_DUALSOURCE:
-		// Handled at the end.
+		WRITE(p, "  %s = vec4(v.rgb, %s);\n", compat.fragColor0, replacedAlpha);
+		WRITE(p, "  %s = vec4(0.0, 0.0, 0.0, v.a);\n", compat.fragColor1);
 		break;
 
 	case REPLACE_ALPHA_YES:
-		WRITE(p, "  v.a = %s;\n", replacedAlpha);
+		WRITE(p, "  %s = vec4(v.rgb, %s);\n", compat.fragColor0, replacedAlpha);
 		break;
 
 	case REPLACE_ALPHA_NO:
-		// Nothing to do.
+		WRITE(p, "  %s = v;\n", compat.fragColor0);
 		break;
 
 	default:
@@ -926,13 +971,14 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		return false;
 	}
 
+	// TODO: This could support more ops using the shader blending mechanism.
 	LogicOpReplaceType replaceLogicOpType = (LogicOpReplaceType)id.Bits(FS_BIT_REPLACE_LOGIC_OP_TYPE, 2);
 	switch (replaceLogicOpType) {
 	case LOGICOPTYPE_ONE:
-		WRITE(p, "  v.rgb = splat3(1.0);\n");
+		WRITE(p, "  %s.rgb = splat3(1.0);\n", compat.fragColor0);
 		break;
 	case LOGICOPTYPE_INVERT:
-		WRITE(p, "  v.rgb = splat3(1.0) - v.rgb;\n");
+		WRITE(p, "  %s.rgb = splat3(1.0) - %s.rgb;\n", compat.fragColor0, compat.fragColor0);
 		break;
 	case LOGICOPTYPE_NORMAL:
 		break;
@@ -940,6 +986,17 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	default:
 		*errorString = "Bad logic op type, corrupt ID?";
 		return false;
+	}
+
+	// Final color computed - apply color write mask.
+	// TODO: Maybe optimize to only do math on the affected channels?
+	// Or .. meh.
+	if (colorWriteMask) {
+		WRITE(p, "  highp uint v32 = packUnorm4x8(%s);\n", compat.fragColor0);
+		WRITE(p, "  highp uint d32 = packUnorm4x8(destColor);\n");
+		// Note that the mask has been flipped to the PC way - 1 means write.
+		WRITE(p, "  v32 = (v32 & u_colorWriteMask) | (d32 & ~u_colorWriteMask);\n");
+		WRITE(p, "  %s = unpackUnorm4x8(v32);\n", compat.fragColor0);
 	}
 
 	if (gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT)) {
@@ -964,17 +1021,13 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		WRITE(p, "  gl_FragDepth = gl_FragCoord.z;\n");
 	}
 
-	if (stencilToAlpha == REPLACE_ALPHA_DUALSOURCE) {
-		WRITE(p, "  %s = vec4(v.rgb, %s);\n", compat.fragColor0, replacedAlpha);
-		WRITE(p, "  %s = vec4(0.0, 0.0, 0.0, v.a);\n", compat.fragColor1);
-	} else if (compat.shaderLanguage != HLSL_D3D9) {
-		WRITE(p, "  %s = v;\n", compat.fragColor0);
-	}
-
 	if (compat.shaderLanguage == HLSL_D3D11) {
+		if (writeDepth) {
+			WRITE(p, "  outfragment.depth = gl_FragDepth;\n");
+		}
 		WRITE(p, "  return outfragment;\n");
 	} else if (compat.shaderLanguage == HLSL_D3D9) {
-		WRITE(p, "  return v;\n");
+		WRITE(p, "  return target;\n");
 	}
 
 	WRITE(p, "}\n");

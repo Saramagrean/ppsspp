@@ -242,57 +242,6 @@ void FramebufferManagerGLES::DrawActiveTexture(float x, float y, float w, float 
 	}
 }
 
-void FramebufferManagerGLES::ReformatFramebufferFrom(VirtualFramebuffer *vfb, GEBufferFormat old) {
-	if (!useBufferedRendering_ || !vfb->fbo) {
-		return;
-	}
-
-	// Technically, we should at this point re-interpret the bytes of the old format to the new.
-	// That might get tricky, and could cause unnecessary slowness in some games.
-	// For now, we just clear alpha/stencil from 565, which fixes shadow issues in Kingdom Hearts.
-	// (it uses 565 to write zeros to the buffer, then 4444 to actually render the shadow.)
-	//
-	// The best way to do this may ultimately be to create a new FBO (combine with any resize?)
-	// and blit with a shader to that, then replace the FBO on vfb.  Stencil would still be complex
-	// to exactly reproduce in 4444 and 8888 formats.
-
-	if (old == GE_FORMAT_565) {
-		// Clear alpha and stencil.
-		draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::KEEP, Draw::RPAction::KEEP, Draw::RPAction::CLEAR }, "ReformatFramebuffer");
-		render_->Clear(0, 0.0f, 0, GL_COLOR_BUFFER_BIT, 0x8, 0, 0, 0, 0);
-	}
-}
-
-void FramebufferManagerGLES::BindFramebufferAsColorTexture(int stage, VirtualFramebuffer *framebuffer, int flags) {
-	if (!framebuffer->fbo || !useBufferedRendering_) {
-		render_->BindTexture(stage, nullptr);
-		gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
-		return;
-	}
-
-	// currentRenderVfb_ will always be set when this is called, except from the GE debugger.
-	// Let's just not bother with the copy in that case.
-	bool skipCopy = (flags & BINDFBCOLOR_MAY_COPY) == 0;
-	if (GPUStepping::IsStepping()) {
-		skipCopy = true;
-	}
-	if (!skipCopy && framebuffer == currentRenderVfb_) {
-		// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
-		Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight);
-		if (renderCopy) {
-			VirtualFramebuffer copyInfo = *framebuffer;
-			copyInfo.fbo = renderCopy;
-
-			CopyFramebufferForColorTexture(&copyInfo, framebuffer, flags);
-			draw_->BindFramebufferAsTexture(renderCopy, stage, Draw::FB_COLOR_BIT, 0);
-		} else {
-			draw_->BindFramebufferAsTexture(framebuffer->fbo, stage, Draw::FB_COLOR_BIT, 0);
-		}
-	} else {
-		draw_->BindFramebufferAsTexture(framebuffer->fbo, stage, Draw::FB_COLOR_BIT, 0);
-	}
-}
-
 void FramebufferManagerGLES::UpdateDownloadTempBuffer(VirtualFramebuffer *nvfb) {
 	_assert_msg_(nvfb->fbo, "Expecting a valid nvfb in UpdateDownloadTempBuffer");
 
@@ -389,16 +338,14 @@ void FramebufferManagerGLES::EndFrame() {
 }
 
 void FramebufferManagerGLES::DeviceLost() {
-	DestroyAllFBOs();
+	FramebufferManagerCommon::DeviceLost();
 	DestroyDeviceObjects();
-	presentation_->DeviceLost();
 }
 
 void FramebufferManagerGLES::DeviceRestore(Draw::DrawContext *draw) {
-	draw_ = draw;
-	presentation_->DeviceRestore(draw);
-	render_ = (GLRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
+	FramebufferManagerCommon::DeviceRestore(draw);
 	CreateDeviceObjects();
+	render_ = (GLRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
 }
 
 void FramebufferManagerGLES::Resized() {

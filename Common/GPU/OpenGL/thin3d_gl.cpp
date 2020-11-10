@@ -307,7 +307,7 @@ public:
 	bool LinkShaders();
 
 	bool RequiresBuffer() override {
-		return inputLayout->RequiresBuffer();
+		return inputLayout && inputLayout->RequiresBuffer();
 	}
 
 	GLuint prim = 0;
@@ -386,7 +386,7 @@ public:
 	void GetFramebufferDimensions(Framebuffer *fbo, int *w, int *h) override;
 
 	void BindSamplerStates(int start, int count, SamplerState **states) override {
-		if (start + count >= MAX_TEXTURE_SLOTS) {
+		if (start + count > MAX_TEXTURE_SLOTS) {
 			return;
 		}
 		for (int i = 0; i < count; i++) {
@@ -497,7 +497,9 @@ private:
 
 	// Bound state
 	OpenGLSamplerState *boundSamplers_[MAX_TEXTURE_SLOTS]{};
-	OpenGLTexture *boundTextures_[MAX_TEXTURE_SLOTS]{};
+	// Point to GLRTexture directly because they can point to the textures
+	// in framebuffers too (which also can be bound).
+	const GLRTexture *boundTextures_[MAX_TEXTURE_SLOTS]{};
 
 	OpenGLPipeline *curPipeline_ = nullptr;
 	OpenGLBuffer *curVBuffers_[4]{};
@@ -632,7 +634,7 @@ OpenGLContext::OpenGLContext() {
 			}
 		}
 	} else {
-		if (!gl_extensions.ForceGL2 || gl_extensions.IsCoreContext) {
+		if (gl_extensions.IsCoreContext) {
 			if (gl_extensions.VersionGEThan(3, 3, 0)) {
 				shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_3xx;
 				shaderLanguageDesc_.glslVersionNumber = 330;
@@ -645,12 +647,14 @@ OpenGLContext::OpenGLContext() {
 				shaderLanguageDesc_.varying_fs = "in";
 				shaderLanguageDesc_.attribute = "in";
 			} else if (gl_extensions.VersionGEThan(3, 0, 0)) {
+				// Hm, I think this is wrong. This should be outside "if (gl_extensions.IsCoreContext)".
 				shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_1xx;
 				shaderLanguageDesc_.glslVersionNumber = 130;
 				shaderLanguageDesc_.fragColor0 = "fragColor0";
 				shaderLanguageDesc_.bitwiseOps = true;
 				shaderLanguageDesc_.texelFetch = "texelFetch";
 			} else {
+				// This too...
 				shaderLanguageDesc_.shaderLanguage = ShaderLanguage::GLSL_1xx;
 				shaderLanguageDesc_.glslVersionNumber = 110;
 				if (gl_extensions.EXT_gpu_shader4) {
@@ -661,15 +665,11 @@ OpenGLContext::OpenGLContext() {
 		}
 	}
 
-	if (gl_extensions.IsGLES && gl_extensions.GLES3) {
-		caps_.framebufferFetchSupported = (gl_extensions.EXT_shader_framebuffer_fetch || gl_extensions.NV_shader_framebuffer_fetch || gl_extensions.ARM_shader_framebuffer_fetch);
+	if (gl_extensions.IsGLES) {
+		caps_.framebufferFetchSupported = (gl_extensions.EXT_shader_framebuffer_fetch || gl_extensions.ARM_shader_framebuffer_fetch);
 		if (gl_extensions.EXT_shader_framebuffer_fetch) {
 			shaderLanguageDesc_.framebufferFetchExtension = "#extension GL_EXT_shader_framebuffer_fetch : require";
-			shaderLanguageDesc_.lastFragData = "gl_LastFragData[0]";
-		} else if (gl_extensions.NV_shader_framebuffer_fetch) {
-			// GL_NV_shader_framebuffer_fetch is available on mobile platform and ES 2.0 only but not on desktop.
-			shaderLanguageDesc_.framebufferFetchExtension = "#extension GL_NV_shader_framebuffer_fetch : require";
-			shaderLanguageDesc_.lastFragData = "gl_LastFragData[0]";
+			shaderLanguageDesc_.lastFragData = gl_extensions.GLES3 ? "fragColor0" : "gl_LastFragData[0]";
 		} else if (gl_extensions.ARM_shader_framebuffer_fetch) {
 			shaderLanguageDesc_.framebufferFetchExtension = "#extension GL_ARM_shader_framebuffer_fetch : require";
 			shaderLanguageDesc_.lastFragData = "gl_LastFragColorARM";
@@ -741,15 +741,16 @@ public:
 	bool HasMips() const {
 		return mipLevels_ > 1 || generatedMips_;
 	}
-	bool CanWrap() const {
-		return canWrap_;
-	}
+
 	TextureType GetType() const { return type_; }
 	void Bind(int stage) {
 		render_->BindTexture(stage, tex_);
 	}
 	int NumMipmaps() const {
 		return mipLevels_;
+	}
+	const GLRTexture *GetTex() const {
+		return tex_;
 	}
 
 private:
@@ -762,7 +763,6 @@ private:
 	TextureType type_;
 	int mipLevels_;
 	bool generatedMips_;
-	bool canWrap_;
 };
 
 OpenGLTexture::OpenGLTexture(GLRenderManager *render, const TextureDesc &desc) : render_(render) {
@@ -773,9 +773,8 @@ OpenGLTexture::OpenGLTexture(GLRenderManager *render, const TextureDesc &desc) :
 	format_ = desc.format;
 	type_ = desc.type;
 	GLenum target = TypeToTarget(desc.type);
-	tex_ = render->CreateTexture(target);
+	tex_ = render->CreateTexture(target, desc.width, desc.height, desc.mipLevels);
 
-	canWrap_ = isPowerOf2(width_) && isPowerOf2(height_);
 	mipLevels_ = desc.mipLevels;
 	if (desc.initData.empty())
 		return;
@@ -1051,7 +1050,7 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 		ERROR_LOG(G3D,  "Invalid primitive type");
 		return nullptr;
 	}
-	if (!desc.depthStencil || !desc.blend || !desc.raster || !desc.inputLayout) {
+	if (!desc.depthStencil || !desc.blend || !desc.raster) {
 		ERROR_LOG(G3D,  "Incomplete prim desciption");
 		return nullptr;
 	}
@@ -1081,7 +1080,9 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 		pipeline->depthStencil->AddRef();
 		pipeline->blend->AddRef();
 		pipeline->raster->AddRef();
-		pipeline->inputLayout->AddRef();
+		if (pipeline->inputLayout) {
+			pipeline->inputLayout->AddRef();
+		}
 		return pipeline;
 	} else {
 		ERROR_LOG(G3D,  "Failed to create pipeline - shaders failed to link");
@@ -1091,7 +1092,7 @@ Pipeline *OpenGLContext::CreateGraphicsPipeline(const PipelineDesc &desc) {
 }
 
 void OpenGLContext::BindTextures(int start, int count, Texture **textures) {
-	if (start + count >= MAX_TEXTURE_SLOTS) {
+	if (start + count > MAX_TEXTURE_SLOTS) {
 		return;
 	}
 	for (int i = start; i < start + count; i++) {
@@ -1102,14 +1103,14 @@ void OpenGLContext::BindTextures(int start, int count, Texture **textures) {
 			continue;
 		}
 		glTex->Bind(i);
-		boundTextures_[i] = glTex;
+		boundTextures_[i] = glTex->GetTex();
 	}
 }
 
 void OpenGLContext::ApplySamplers() {
 	for (int i = 0; i < MAX_TEXTURE_SLOTS; i++) {
 		const OpenGLSamplerState *samp = boundSamplers_[i];
-		const OpenGLTexture *tex = boundTextures_[i];
+		const GLRTexture *tex = boundTextures_[i];
 		if (tex) {
 			_assert_(samp);
 		} else {
@@ -1117,7 +1118,7 @@ void OpenGLContext::ApplySamplers() {
 		}
 		GLenum wrapS;
 		GLenum wrapT;
-		if (tex->CanWrap()) {
+		if (tex->canWrap) {
 			wrapS = samp->wrapU;
 			wrapT = samp->wrapV;
 		} else {
@@ -1125,9 +1126,9 @@ void OpenGLContext::ApplySamplers() {
 			wrapT = GL_CLAMP_TO_EDGE;
 		}
 		GLenum magFilt = samp->magFilt;
-		GLenum minFilt = tex->HasMips() ? samp->mipMinFilt : samp->minFilt;
+		GLenum minFilt = tex->numMips > 1 ? samp->mipMinFilt : samp->minFilt;
 		renderManager_.SetTextureSampler(i, wrapS, wrapT, magFilt, minFilt, 0.0f);
-		renderManager_.SetTextureLod(i, 0.0, (float)(tex->NumMipmaps() - 1), 0.0);
+		renderManager_.SetTextureLod(i, 0.0, (float)(tex->numMips - 1), 0.0);
 	}
 }
 
@@ -1219,7 +1220,9 @@ void OpenGLContext::UpdateDynamicUniformBuffer(const void *ub, size_t size) {
 void OpenGLContext::Draw(int vertexCount, int offset) {
 	_dbg_assert_msg_(curVBuffers_[0], "Can't call Draw without a vertex buffer");
 	ApplySamplers();
-	renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, curVBuffers_[0]->buffer_, curVBufferOffsets_[0]);
+	if (curPipeline_->inputLayout) {
+		renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, curVBuffers_[0]->buffer_, curVBufferOffsets_[0]);
+	}
 	renderManager_.Draw(curPipeline_->prim, offset, vertexCount);
 }
 
@@ -1227,12 +1230,15 @@ void OpenGLContext::DrawIndexed(int vertexCount, int offset) {
 	_dbg_assert_msg_(curVBuffers_[0], "Can't call DrawIndexed without a vertex buffer");
 	_dbg_assert_msg_(curIBuffer_, "Can't call DrawIndexed without an index buffer");
 	ApplySamplers();
-	renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, curVBuffers_[0]->buffer_, curVBufferOffsets_[0]);
+	if (curPipeline_->inputLayout) {
+		renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, curVBuffers_[0]->buffer_, curVBufferOffsets_[0]);
+	}
 	renderManager_.BindIndexBuffer(curIBuffer_->buffer_);
 	renderManager_.DrawIndexed(curPipeline_->prim, vertexCount, GL_UNSIGNED_SHORT, (void *)((intptr_t)curIBufferOffset_ + offset * sizeof(uint32_t)));
 }
 
 void OpenGLContext::DrawUP(const void *vdata, int vertexCount) {
+	_assert_(curPipeline_->inputLayout);
 	int stride = curPipeline_->inputLayout->stride;
 	size_t dataSize = stride * vertexCount;
 
@@ -1242,7 +1248,9 @@ void OpenGLContext::DrawUP(const void *vdata, int vertexCount) {
 	size_t offset = frameData.push->Push(vdata, dataSize, &buf);
 
 	ApplySamplers();
-	renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, buf, offset);
+	if (curPipeline_->inputLayout) {
+		renderManager_.BindVertexBuffer(curPipeline_->inputLayout->inputLayout_, buf, offset);
+	}
 	renderManager_.Draw(curPipeline_->prim, 0, vertexCount);
 }
 
@@ -1273,7 +1281,7 @@ OpenGLInputLayout::~OpenGLInputLayout() {
 void OpenGLInputLayout::Compile(const InputLayoutDesc &desc) {
 	// TODO: This is only accurate if there's only one stream. But whatever, for now we
 	// never use multiple streams anyway.
-	stride = (GLsizei)desc.bindings[0].stride;
+	stride = desc.bindings.empty() ? 0 : (GLsizei)desc.bindings[0].stride;
 
 	std::vector<GLRInputLayout::Entry> entries;
 	for (auto &attr : desc.attributes) {
@@ -1310,7 +1318,11 @@ void OpenGLInputLayout::Compile(const InputLayoutDesc &desc) {
 
 		entries.push_back(entry);
 	}
-	inputLayout_ = render_->CreateInputLayout(entries);
+	if (!entries.empty()) {
+		inputLayout_ = render_->CreateInputLayout(entries);
+	} else {
+		inputLayout_ = nullptr;
+	}
 }
 
 Framebuffer *OpenGLContext::CreateFramebuffer(const FramebufferDesc &desc) {
@@ -1365,12 +1377,18 @@ void OpenGLContext::BindFramebufferAsTexture(Framebuffer *fbo, int binding, FBCh
 	OpenGLFramebuffer *fb = (OpenGLFramebuffer *)fbo;
 
 	GLuint aspect = 0;
-	if (channelBit & FB_COLOR_BIT)
+	if (channelBit & FB_COLOR_BIT) {
 		aspect |= GL_COLOR_BUFFER_BIT;
-	if (channelBit & FB_DEPTH_BIT)
+		boundTextures_[binding] = &fb->framebuffer_->color_texture;
+	}
+	if (channelBit & FB_DEPTH_BIT) {
 		aspect |= GL_DEPTH_BUFFER_BIT;
-	if (channelBit & FB_STENCIL_BIT)
+		boundTextures_[binding] = &fb->framebuffer_->z_stencil_texture;
+	}
+	if (channelBit & FB_STENCIL_BIT) {
 		aspect |= GL_STENCIL_BUFFER_BIT;
+		boundTextures_[binding] = &fb->framebuffer_->z_stencil_texture;
+	}
 	renderManager_.BindFramebufferAsTexture(fb->framebuffer_, binding, aspect, color);
 }
 

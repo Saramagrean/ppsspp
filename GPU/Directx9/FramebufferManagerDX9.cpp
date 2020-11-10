@@ -31,7 +31,7 @@
 #include "Common/GPU/D3D9/D3D9StateCache.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/PresentationCommon.h"
-#include "GPU/Common/ShaderTranslation.h"
+#include "Common/GPU/ShaderTranslation.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "GPU/Directx9/FramebufferManagerDX9.h"
 #include "GPU/Directx9/ShaderManagerDX9.h"
@@ -228,83 +228,6 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 		device_->SetVertexShader(pFramebufferVertexShader);
 	}
 
-	void FramebufferManagerDX9::ReformatFramebufferFrom(VirtualFramebuffer *vfb, GEBufferFormat old) {
-		if (!useBufferedRendering_ || !vfb->fbo) {
-			return;
-		}
-
-		// Technically, we should at this point re-interpret the bytes of the old format to the new.
-		// That might get tricky, and could cause unnecessary slowness in some games.
-		// For now, we just clear alpha/stencil from 565, which fixes shadow issues in Kingdom Hearts.
-		// (it uses 565 to write zeros to the buffer, then 4444 to actually render the shadow.)
-		//
-		// The best way to do this may ultimately be to create a new FBO (combine with any resize?)
-		// and blit with a shader to that, then replace the FBO on vfb.  Stencil would still be complex
-		// to exactly reproduce in 4444 and 8888 formats.
-
-		if (old == GE_FORMAT_565) {
-			draw_->BindFramebufferAsRenderTarget(vfb->fbo, { Draw::RPAction::KEEP, Draw::RPAction::KEEP, Draw::RPAction::CLEAR }, "ReformatFramebuffer");
-
-			dxstate.scissorTest.disable();
-			dxstate.depthWrite.set(FALSE);
-			dxstate.colorMask.set(false, false, false, true);
-			dxstate.stencilFunc.set(D3DCMP_ALWAYS, 0, 0);
-			dxstate.stencilMask.set(0xFF);
-			gstate_c.Dirty(DIRTY_BLEND_STATE | DIRTY_DEPTHSTENCIL_STATE | DIRTY_RASTER_STATE | DIRTY_VIEWPORTSCISSOR_STATE | DIRTY_TEXTURE_PARAMS | DIRTY_VERTEXSHADER_STATE | DIRTY_FRAGMENTSHADER_STATE);
-
-			float coord[20] = {
-				-1.0f,-1.0f,0, 0,0,
-				1.0f,-1.0f,0, 0,0,
-				1.0f,1.0f,0, 0,0,
-				-1.0f,1.0f,0, 0,0,
-			};
-
-			dxstate.cullMode.set(false, false);
-			device_->SetVertexDeclaration(pFramebufferVertexDecl);
-			device_->SetPixelShader(pFramebufferPixelShader);
-			device_->SetVertexShader(pFramebufferVertexShader);
-			shaderManagerDX9_->DirtyLastShader();
-			device_->SetTexture(0, nullTex_);
-
-			D3DVIEWPORT9 vp{ 0, 0, (DWORD)vfb->renderWidth, (DWORD)vfb->renderHeight, 0.0f, 1.0f };
-			device_->SetViewport(&vp);
-
-			// This should clear stencil and alpha without changing the other colors.
-			HRESULT hr = device_->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, coord, 5 * sizeof(float));
-			if (FAILED(hr)) {
-				ERROR_LOG_REPORT(G3D, "ReformatFramebufferFrom() failed: %08x", hr);
-			}
-			dxstate.viewport.restore();
-
-			textureCache_->ForgetLastTexture();
-		}
-	}
-
-	static void CopyPixelDepthOnly(u32 *dstp, const u32 *srcp, size_t c) {
-		size_t x = 0;
-
-#ifdef _M_SSE
-		size_t sseSize = (c / 4) * 4;
-		const __m128i srcMask = _mm_set1_epi32(0x00FFFFFF);
-		const __m128i dstMask = _mm_set1_epi32(0xFF000000);
-		__m128i *dst = (__m128i *)dstp;
-		const __m128i *src = (const __m128i *)srcp;
-
-		for (; x < sseSize; x += 4) {
-			const __m128i bits24 = _mm_and_si128(_mm_load_si128(src), srcMask);
-			const __m128i bits8 = _mm_and_si128(_mm_load_si128(dst), dstMask);
-			_mm_store_si128(dst, _mm_or_si128(bits24, bits8));
-			dst++;
-			src++;
-		}
-#endif
-
-		// Copy the remaining pixels that didn't fit in SSE.
-		for (; x < c; ++x) {
-			memcpy(dstp + x, srcp + x, 3);
-		}
-	}
-
 	LPDIRECT3DSURFACE9 FramebufferManagerDX9::GetOffscreenSurface(LPDIRECT3DSURFACE9 similarSurface, VirtualFramebuffer *vfb) {
 		D3DSURFACE_DESC desc = {};
 		HRESULT hr = similarSurface->GetDesc(&desc);
@@ -334,41 +257,6 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 		const OffscreenSurface info = {offscreen, gpuStats.numFlips};
 		offscreenSurfaces_[key] = info;
 		return offscreen;
-	}
-
-	void FramebufferManagerDX9::BindFramebufferAsColorTexture(int stage, VirtualFramebuffer *framebuffer, int flags) {
-		if (framebuffer == NULL) {
-			framebuffer = currentRenderVfb_;
-		}
-
-		if (!framebuffer->fbo || !useBufferedRendering_) {
-			device_->SetTexture(stage, nullptr);
-			gstate_c.skipDrawReason |= SKIPDRAW_BAD_FB_TEXTURE;
-			return;
-		}
-
-		// currentRenderVfb_ will always be set when this is called, except from the GE debugger.
-		// Let's just not bother with the copy in that case.
-		bool skipCopy = (flags & BINDFBCOLOR_MAY_COPY) == 0;
-		if (GPUStepping::IsStepping()) {
-			skipCopy = true;
-		}
-		if (!skipCopy && framebuffer == currentRenderVfb_) {
-			// TODO: Maybe merge with bvfbs_?  Not sure if those could be packing, and they're created at a different size.
-			Draw::Framebuffer *renderCopy = GetTempFBO(TempFBO::COPY, framebuffer->renderWidth, framebuffer->renderHeight);
-			if (renderCopy) {
-				VirtualFramebuffer copyInfo = *framebuffer;
-				copyInfo.fbo = renderCopy;
-
-				CopyFramebufferForColorTexture(&copyInfo, framebuffer, flags);
-				RebindFramebuffer("RebindFramebuffer - BindFramebufferAsColorTexture");
-				draw_->BindFramebufferAsTexture(renderCopy, stage, Draw::FB_COLOR_BIT, 0);
-			} else {
-				draw_->BindFramebufferAsTexture(framebuffer->fbo, stage, Draw::FB_COLOR_BIT, 0);
-			}
-		} else {
-			draw_->BindFramebufferAsTexture(framebuffer->fbo, stage, Draw::FB_COLOR_BIT, 0);
-		}
 	}
 
 	void FramebufferManagerDX9::UpdateDownloadTempBuffer(VirtualFramebuffer *nvfb) {
@@ -557,10 +445,6 @@ static const D3DVERTEXELEMENT9 g_FramebufferVertexElements[] = {
 	}
 
 	void FramebufferManagerDX9::EndFrame() {
-	}
-
-	void FramebufferManagerDX9::DeviceLost() {
-		DestroyAllFBOs();
 	}
 
 	void FramebufferManagerDX9::DecimateFBOs() {

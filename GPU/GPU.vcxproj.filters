@@ -222,9 +222,6 @@
     <ClInclude Include="D3D11\D3D11Util.h">
       <Filter>D3D11</Filter>
     </ClInclude>
-    <ClInclude Include="Common\ShaderTranslation.h">
-      <Filter>Common</Filter>
-    </ClInclude>
     <ClInclude Include="Software\Sampler.h">
       <Filter>Software</Filter>
     </ClInclude>
@@ -268,6 +265,9 @@
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="Common\VertexShaderGenerator.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\ReinterpretFramebuffer.h">
       <Filter>Common</Filter>
     </ClInclude>
   </ItemGroup>
@@ -482,9 +482,6 @@
     <ClCompile Include="D3D11\StencilBufferD3D11.cpp">
       <Filter>D3D11</Filter>
     </ClCompile>
-    <ClCompile Include="Common\ShaderTranslation.cpp">
-      <Filter>Common</Filter>
-    </ClCompile>
     <ClCompile Include="Common\ShaderCommon.cpp">
       <Filter>Common</Filter>
     </ClCompile>
@@ -537,6 +534,9 @@
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="Common\VertexShaderGenerator.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\ReinterpretFramebuffer.cpp">
       <Filter>Common</Filter>
     </ClCompile>
   </ItemGroup>

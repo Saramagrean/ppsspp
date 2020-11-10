@@ -175,7 +175,7 @@ void GPU_GLES::CheckGPUFeatures() {
 		}
 	}
 
-	if (gl_extensions.EXT_shader_framebuffer_fetch || gl_extensions.NV_shader_framebuffer_fetch || gl_extensions.ARM_shader_framebuffer_fetch) {
+	if (gl_extensions.EXT_shader_framebuffer_fetch || gl_extensions.ARM_shader_framebuffer_fetch) {
 		// This has caused problems in the past.  Let's only enable on GLES3.
 		if (features & GPU_SUPPORTS_GLSL_ES_300) {
 			features |= GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH;
@@ -300,21 +300,18 @@ void GPU_GLES::DeviceLost() {
 	fragmentTestCache_.DeviceLost();
 	depalShaderCache_.DeviceLost();
 	drawEngine_.DeviceLost();
-	framebufferManagerGL_->DeviceLost();
-	// Don't even try to access the lost device.
-	draw_ = nullptr;
+
+	GPUCommon::DeviceLost();
 }
 
 void GPU_GLES::DeviceRestore() {
-	draw_ = (Draw::DrawContext *)PSP_CoreParameter().graphicsContext->GetDrawContext();
-	INFO_LOG(G3D, "GPU_GLES: DeviceRestore");
+	GPUCommon::DeviceRestore();
 
 	UpdateCmdInfo();
 	UpdateVsyncInterval(true);
 
 	shaderManagerGL_->DeviceRestore(draw_);
 	textureCacheGL_->DeviceRestore(draw_);
-	framebufferManagerGL_->DeviceRestore(draw_);
 	drawEngine_.DeviceRestore(draw_);
 	fragmentTestCache_.DeviceRestore(draw_);
 	depalShaderCache_.DeviceRestore(draw_);

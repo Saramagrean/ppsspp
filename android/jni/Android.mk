@@ -254,6 +254,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/GPU/thin3d.cpp \
   $(SRC)/Common/GPU/Shader.cpp \
   $(SRC)/Common/GPU/ShaderWriter.cpp \
+  $(SRC)/Common/GPU/ShaderTranslation.cpp \
   $(SRC)/Common/Render/DrawBuffer.cpp \
   $(SRC)/Common/Render/TextureAtlas.cpp \
   $(SRC)/Common/Render/Text/draw_text.cpp \
@@ -316,11 +317,11 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/GPU/Common/ShaderId.cpp.arm \
   $(SRC)/GPU/Common/GPUStateUtils.cpp.arm \
   $(SRC)/GPU/Common/SoftwareTransformCommon.cpp.arm \
+  $(SRC)/GPU/Common/ReinterpretFramebuffer.cpp \
   $(SRC)/GPU/Common/VertexDecoderCommon.cpp.arm \
   $(SRC)/GPU/Common/TextureCacheCommon.cpp.arm \
   $(SRC)/GPU/Common/TextureScalerCommon.cpp.arm \
   $(SRC)/GPU/Common/ShaderCommon.cpp \
-  $(SRC)/GPU/Common/ShaderTranslation.cpp \
   $(SRC)/GPU/Common/StencilCommon.cpp \
   $(SRC)/GPU/Common/SplineCommon.cpp.arm \
   $(SRC)/GPU/Common/DrawEngineCommon.cpp.arm \

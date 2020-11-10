@@ -158,6 +158,8 @@ enum class TempFBO {
 	BLIT,
 	// For copies of framebuffers (e.g. shader blending.)
 	COPY,
+	// For another type of framebuffers that can happen together with COPY (see Outrun)
+	REINTERPRET,
 	// Used to copy stencil data, means we need a stencil backing.
 	STENCIL,
 };
@@ -189,7 +191,7 @@ class TextureCacheCommon;
 
 class FramebufferManagerCommon {
 public:
-	explicit FramebufferManagerCommon(Draw::DrawContext *draw);
+	FramebufferManagerCommon(Draw::DrawContext *draw);
 	virtual ~FramebufferManagerCommon();
 
 	virtual void Init();
@@ -233,6 +235,7 @@ public:
 	bool NotifyBlockTransferBefore(u32 dstBasePtr, int dstStride, int dstX, int dstY, u32 srcBasePtr, int srcStride, int srcX, int srcY, int w, int h, int bpp, u32 skipDrawReason);
 	void NotifyBlockTransferAfter(u32 dstBasePtr, int dstStride, int dstX, int dstY, u32 srcBasePtr, int srcStride, int srcX, int srcY, int w, int h, int bpp, u32 skipDrawReason);
 
+	bool BindFramebufferAsColorTexture(int stage, VirtualFramebuffer *framebuffer, int flags);
 	void ReadFramebufferToMemory(VirtualFramebuffer *vfb, int x, int y, int w, int h);
 
 	void DownloadFramebufferForClut(u32 fb_address, u32 loadBytes);
@@ -305,6 +308,9 @@ public:
 	virtual void Resized();
 	virtual void DestroyAllFBOs();
 
+	virtual void DeviceLost();
+	virtual void DeviceRestore(Draw::DrawContext *draw);
+
 	Draw::Framebuffer *GetTempFBO(TempFBO reason, u16 w, u16 h);
 
 	// Debug features
@@ -316,6 +322,7 @@ public:
 	const std::vector<VirtualFramebuffer *> &Framebuffers() {
 		return vfbs_;
 	}
+	void ReinterpretFramebufferFrom(VirtualFramebuffer *vfb, GEBufferFormat old);
 
 protected:
 	virtual void PackFramebufferSync_(VirtualFramebuffer *vfb, int x, int y, int w, int h);
@@ -340,7 +347,6 @@ protected:
 	void NotifyRenderFramebufferUpdated(VirtualFramebuffer *vfb, bool vfbFormatChanged);
 	void NotifyRenderFramebufferSwitched(VirtualFramebuffer *prevVfb, VirtualFramebuffer *vfb, bool isClearingDepth);
 
-	virtual void ReformatFramebufferFrom(VirtualFramebuffer *vfb, GEBufferFormat old) = 0;
 	void BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst);
 
 	void ResizeFramebufFBO(VirtualFramebuffer *vfb, int w, int h, bool force = false, bool skipCopy = false);
@@ -428,5 +434,7 @@ protected:
 	// Thin3D stuff for reinterpreting image data between the various 16-bit formats.
 	// Safe, not optimal - there might be input attachment tricks, etc, but we can't use them
 	// since we don't want N different implementations.
-	Draw::Pipeline *reinterpretFromTo_[3][3];
+	Draw::Pipeline *reinterpretFromTo_[3][3]{};
+	Draw::ShaderModule *reinterpretVS_ = nullptr;
+	Draw::SamplerState *reinterpretSampler_ = nullptr;
 };
