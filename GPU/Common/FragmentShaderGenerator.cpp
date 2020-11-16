@@ -116,6 +116,11 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool needFragCoord = readFramebuffer || gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = gstate_c.Supports(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 
+	if (shaderDepal && !doTexture) {
+		*errorString = "depal requires a texture";
+		return false;
+	}
+
 	if (readFramebuffer && compat.shaderLanguage == HLSL_D3D9) {
 		*errorString = "Framebuffer read not yet supported in HLSL D3D9";
 		return false;
@@ -141,14 +146,15 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "layout (binding = 2) uniform sampler2D pal;\n");
 		}
 
-		WRITE(p, "layout (location = 1) %s in vec4 v_color0;\n", shading);
+		// Note: the precision qualifiers must match the vertex shader!
+		WRITE(p, "layout (location = 1) %s in lowp vec4 v_color0;\n", shading);
 		if (lmode)
-			WRITE(p, "layout (location = 2) %s in vec3 v_color1;\n", shading);
+			WRITE(p, "layout (location = 2) %s in lowp vec3 v_color1;\n", shading);
 		if (enableFog) {
-			WRITE(p, "layout (location = 3) in float v_fogdepth;\n");
+			WRITE(p, "layout (location = 3) in highp float v_fogdepth;\n");
 		}
 		if (doTexture) {
-			WRITE(p, "layout (location = 0) in vec3 v_texcoord;\n");
+			WRITE(p, "layout (location = 0) in highp vec3 v_texcoord;\n");
 		}
 
 		if (enableAlphaTest && !alphaTestAgainstZero) {
@@ -407,7 +413,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	// Provide implementations of packUnorm4x8 and unpackUnorm4x8 if not available.
-	if (colorWriteMask && compat.shaderLanguage == HLSL_D3D11 || (compat.shaderLanguage == GLSL_3xx && compat.glslVersionNumber < 400)) {
+	if (colorWriteMask && (compat.shaderLanguage == HLSL_D3D11 || (compat.shaderLanguage == GLSL_3xx && (!compat.gles && compat.glslVersionNumber < 400)))) {
 		WRITE(p, "uint packUnorm4x8(vec4 v) {\n");
 		WRITE(p, "  v = clamp(v, 0.0, 1.0);\n");
 		WRITE(p, "  uvec4 u = uvec4(255.0 * v);\n");
@@ -564,10 +570,10 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 				WRITE(p, "  } else {\n");
 				WRITE(p, "    uv_round = uv;\n");
 				WRITE(p, "  }\n");
-				WRITE(p, "  vec4 t = %s(tex, uv_round);\n", compat.texture);
-				WRITE(p, "  vec4 t1 = %sOffset(tex, uv_round, ivec2(1, 0));\n", compat.texture);
-				WRITE(p, "  vec4 t2 = %sOffset(tex, uv_round, ivec2(0, 1));\n", compat.texture);
-				WRITE(p, "  vec4 t3 = %sOffset(tex, uv_round, ivec2(1, 1));\n", compat.texture);
+				WRITE(p, "  highp vec4 t = %s(tex, uv_round);\n", compat.texture);
+				WRITE(p, "  highp vec4 t1 = %sOffset(tex, uv_round, ivec2(1, 0));\n", compat.texture);
+				WRITE(p, "  highp vec4 t2 = %sOffset(tex, uv_round, ivec2(0, 1));\n", compat.texture);
+				WRITE(p, "  highp vec4 t3 = %sOffset(tex, uv_round, ivec2(1, 1));\n", compat.texture);
 				WRITE(p, "  uint depalMask = (u_depal_mask_shift_off_fmt & 0xFFU);\n");
 				WRITE(p, "  uint depalShift = (u_depal_mask_shift_off_fmt >> 8) & 0xFFU;\n");
 				WRITE(p, "  uint depalOffset = ((u_depal_mask_shift_off_fmt >> 16) & 0xFFU) << 4;\n");
