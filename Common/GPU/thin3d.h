@@ -222,6 +222,7 @@ enum class GPUVendor {
 	VENDOR_IMGTEC,  // PowerVR
 	VENDOR_BROADCOM,  // Raspberry
 	VENDOR_VIVANTE,
+	VENDOR_APPLE,
 };
 
 enum class NativeObject {
@@ -314,6 +315,7 @@ public:
 		PVR_GENMIPMAP_HEIGHT_GREATER = 3,
 		BROKEN_NAN_IN_CONDITIONAL = 4,
 		COLORWRITEMASK_BROKEN_WITH_DEPTHTEST = 5,
+		BROKEN_FLAT_IN_SHADER = 6,
 	};
 
 protected:
