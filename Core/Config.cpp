@@ -546,7 +546,7 @@ static int DefaultInternalResolution() {
 
 static int DefaultUnthrottleMode() {
 #if PPSSPP_PLATFORM(ANDROID) || defined(USING_QT_UI) || PPSSPP_PLATFORM(UWP) || PPSSPP_PLATFORM(IOS)
-	return (int)UnthrottleMode::SKIP_DRAW;
+	return (int)UnthrottleMode::SKIP_FLIP;
 #else
 	return (int)UnthrottleMode::CONTINUOUS;
 #endif
