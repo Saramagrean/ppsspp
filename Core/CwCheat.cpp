@@ -194,6 +194,8 @@ void CheatFileParser::ParseLine(const std::string &line) {
 
 	case 'M':
 		// TempAR data line.
+		// I think the actual name of that format was PSPAR,
+		// but everyone uses TempAR since it's a plugin name that supports them.
 		ParseDataLine(line.substr(2), CheatCodeFormat::TEMPAR);
 		return;
 
@@ -777,9 +779,310 @@ CheatOperation CWCheatEngine::InterpretNextCwCheat(const CheatCode &cheat, size_
 }
 
 CheatOperation CWCheatEngine::InterpretNextTempAR(const CheatCode &cheat, size_t &i) {
-	// TODO
-	_assert_(false);
-	return { CheatOp::Invalid };
+	// PSP AR / Temp AR based on http://raing3.gshi.org/psp-utilities/#!/page/PSP/CodeTypes
+	// checks for "TARexecutionStatus" for each cheat other than 0xD0 and 0xD2
+	// most cheats also uses "TARoffset" and can use "TARdxRegister" to store temporary var
+	const CheatLine &line1 = cheat.lines[i++];
+	const uint32_t &arg = line1.part2;
+
+	// Filled as needed.
+	u32 addr;
+
+	int type = line1.part1 >> 28;
+	switch (type) {
+	case 0x0: // Write 32-bit data.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF + TARoffset;
+			return{ CheatOp::Write, addr, 4, arg };
+		}
+		return{ CheatOp::Noop };
+
+	case 0x1: // Write 16-bit data.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF + TARoffset;
+			return{ CheatOp::Write, addr, 2, arg };
+		}
+		return{ CheatOp::Noop };
+
+	case 0x2: // Write 8-bit data(up to 32 bits to avoid common user mistakes).
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF + TARoffset;
+			if (arg & 0xFFFF0000)
+				return{ CheatOp::Write, addr, 4, arg };
+			else if (arg & 0x0000FF00)
+				return{ CheatOp::Write, addr, 2, arg };
+			else
+				return{ CheatOp::Write, addr, 1, arg };
+		}
+		return{ CheatOp::Noop };
+
+	case 0x3: // Greater Than 32 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U32(addr) > arg) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0x4: // Less Than 32 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U32(addr) < arg) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0x5: // Equal To 32 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U32(addr) != arg) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0x6: // Not Equal To 32 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U32(addr) == arg) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0x7: // Greater Than 16 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U16(addr) > (arg & 0xFFFF)) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0x8: // Less Than 16 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U16(addr) < (arg & 0xFFFF)) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0x9: // Equal To 16 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U16(addr) != (arg & 0xFFFF)) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0xA: // Not Equal To 16 bit conditional code.
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			addr += TARoffset;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				if (Memory::Read_U16(addr) == (arg & 0xFFFF)) {
+					TARexecutionStatus = false;
+				}
+			}
+
+		}
+		return{ CheatOp::Noop };
+
+	case 0xB: // Load Offset
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			if (Memory::IsValidAddress(addr)) {
+				InvalidateICache(addr, 4);
+				TARoffset += Memory::Read_U32(addr);
+			}
+		}
+		return{ CheatOp::Noop };
+
+	case 0xC:
+		if (TARexecutionStatus) {
+			int Ctype = line1.part1 >> 24;
+			switch (Ctype) {
+			case 0xC0: // Sets TARdxRepeat and next code to be executed
+				TARdxRepeat = arg - 1;
+				TARtoExecute = i;
+				return{ CheatOp::Noop };
+			case 0xC1: // Call function with arguments / lazy
+				return{ CheatOp::Noop };
+			case 0xC2: // "Run code from cheat list" / ?
+				return{ CheatOp::Noop };
+			case 0xC4: // "Safe Data Store" / no ?
+				return{ CheatOp::Noop };
+			case 0xC5: // Counter / dumb
+				return{ CheatOp::Noop };
+			case 0xC6: // Write offset value
+				if (Memory::IsValidAddress(arg)) {
+					InvalidateICache(arg, 4);
+					Memory::Write_U32(TARoffset, arg);
+				}
+				return{ CheatOp::Noop };
+			case 0xCF: // UI types  / blah
+				return{ CheatOp::Noop };
+			default:
+				return{ CheatOp::Invalid };
+			}
+		}
+		return{ CheatOp::Invalid };
+
+	case 0xD:
+		{
+			int Dtype = line1.part1 >> 24;
+			switch (Dtype) {
+			case 0xD0:
+				TARexecutionStatus = true;
+				return{ CheatOp::Noop };
+			case 0xD1: // Loop following code TARdxRepeat times
+				if (TARexecutionStatus) {
+				}
+				return{ CheatOp::Noop };
+			case 0xD2: // 0xD1 + reset all TARstuff
+				if (TARdxRepeat == 0) {
+					TARtoExecute = 0;
+					TARexecutionStatus = true;
+					TARdxRegister = 0;
+					TARoffset = 0;
+				} else {
+					TARdxRepeat = TARdxRepeat - 1;
+					i = TARtoExecute;
+				}
+				return{ CheatOp::Noop };
+			case 0xD4: // Dx Data Operation
+				if (TARexecutionStatus) {
+				// Todo all kinds based on line1.part1 & 0xF
+				//0 - add
+				//1 - or
+				//2 - and
+				//3 - xor
+				//4 - logical shift left
+				//5 - logical shift right
+				//6 - rotate right
+				//7 - arithmetic shift right
+				//8 - multiply
+					TARdxRegister += arg;
+				}
+				return{ CheatOp::Noop };
+			case 0xD5: // Set register
+				if (TARexecutionStatus) {
+					TARdxRegister = arg;
+				}
+				return{ CheatOp::Noop };
+			case 0xD6: // Write 32 bit Dx register and increase the offset by 0x4
+				if (TARexecutionStatus) {
+					if (Memory::IsValidAddress(arg + TARoffset)) {
+						InvalidateICache(arg, 4);
+						Memory::Write_U32(TARdxRegister, arg + TARoffset);
+						TARoffset += 0x4;
+					}
+				}
+				return{ CheatOp::Noop };
+			case 0xD7: // Write 16 bit Dx register and increase the offset by 0x2
+				if (TARexecutionStatus) {
+					if (Memory::IsValidAddress(arg + TARoffset)) {
+						InvalidateICache(arg, 4);
+						Memory::Write_U16(TARdxRegister & 0xFFFF, arg + TARoffset);
+						TARoffset += 0x2;
+					}
+				}
+				return{ CheatOp::Noop };
+			case 0xD8: // Write 8 bit Dx register and increase the offset by 0x1
+				if (TARexecutionStatus) {
+					if (Memory::IsValidAddress(arg + TARoffset)) {
+						InvalidateICache(arg, 4);
+						Memory::Write_U8(TARdxRegister & 0xFF, arg + TARoffset);
+						TARoffset += 0x1;
+					}
+				}
+				return{ CheatOp::Noop };
+			case 0xD9: // Load 32 bit value into Dx register
+				if (TARexecutionStatus) {
+					if (Memory::IsValidAddress(arg + TARoffset)) {
+						InvalidateICache(arg, 4);
+						TARdxRegister = Memory::Read_U32(arg + TARoffset);
+					}
+				}
+				return{ CheatOp::Noop };
+			case 0xDA:  // Load 16 bit value into Dx register
+				if (TARexecutionStatus) {
+					if (Memory::IsValidAddress(arg + TARoffset)) {
+						InvalidateICache(arg, 4);
+						TARdxRegister = Memory::Read_U16(arg + TARoffset);
+					}
+				}
+				return{ CheatOp::Noop };
+			case 0xDB:  // Load 8 bit value into Dx register
+				if (TARexecutionStatus) {
+					if (Memory::IsValidAddress(arg + TARoffset)) {
+						InvalidateICache(arg, 4);
+						TARdxRegister = Memory::Read_U8(arg + TARoffset);
+					}
+				}
+				return{ CheatOp::Noop };
+			default:
+				return{ CheatOp::Invalid };
+			}
+		}
+		return{ CheatOp::Invalid };
+
+	case 0xE: // copies arg of bytes after this code to addr (?)
+		if (TARexecutionStatus) {
+		}
+		return{ CheatOp::Invalid };
+	case 0xF: // memcpy
+		if (TARexecutionStatus) {
+			addr = line1.part1 & 0x0FFFFFFF;
+			CheatOperation op = { CheatOp::CopyBytesFrom, TARoffset, 0, arg };
+			op.copyBytesFrom.destAddr = addr;
+			return op;
+		}
+		return{ CheatOp::Noop };
+
+	default:
+		return{ CheatOp::Invalid };
+	}
 }
 
 CheatOperation CWCheatEngine::InterpretNextOp(const CheatCode &cheat, size_t &i) {
