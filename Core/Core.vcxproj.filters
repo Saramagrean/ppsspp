@@ -971,6 +971,9 @@
     <ClCompile Include="Debugger\WebSocket\InputBroadcaster.cpp">
       <Filter>Debugger\WebSocket</Filter>
     </ClCompile>
+    <ClCompile Include="Debugger\MemBlockInfo.cpp">
+      <Filter>Debugger</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ELF\ElfReader.h">
@@ -1660,6 +1663,9 @@
     </ClInclude>
     <ClInclude Include="Debugger\WebSocket\InputBroadcaster.h">
       <Filter>Debugger\WebSocket</Filter>
+    </ClInclude>
+    <ClInclude Include="Debugger\MemBlockInfo.h">
+      <Filter>Debugger</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
