@@ -1231,7 +1231,7 @@ bool PPGeImage::Load() {
 		return false;
 	}
 
-	Memory::Memcpy(texture_, textureData, dataSize);
+	Memory::Memcpy(texture_, textureData, dataSize, "PPGeTex");
 	Memory::Memset(texture_ + dataSize, 0, texSize - dataSize, "PPGeTexClear");
 	free(textureData);
 
