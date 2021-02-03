@@ -1232,7 +1232,7 @@ bool PPGeImage::Load() {
 	}
 
 	Memory::Memcpy(texture_, textureData, dataSize);
-	Memory::Memset(texture_ + dataSize, 0, texSize - dataSize);
+	Memory::Memset(texture_ + dataSize, 0, texSize - dataSize, "PPGeTexClear");
 	free(textureData);
 
 	lastFrame_ = gpuStats.numFlips;
