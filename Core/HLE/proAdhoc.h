@@ -356,8 +356,8 @@ typedef struct SceNetAdhocPtpStat {
 	SceNetEtherAddr paddr;
 	u16_le lport;
 	u16_le pport;
-	s32_le snd_sb_cc; // Number of bytes existed in buffer to be sent/flushed?
-	s32_le rcv_sb_cc; // Number of bytes available in buffer to be received?
+	u32_le snd_sb_cc; // Number of bytes existed in sendBuffer to be sent/flushed
+	u32_le rcv_sb_cc; // Number of bytes available in recvBuffer to be received
 	s32_le state;
 } PACK SceNetAdhocPtpStat;
 
@@ -1271,8 +1271,10 @@ bool isPrivateIP(uint32_t ip);
 
 /*
  * Get Number of bytes available in buffer to be Received
+ * @param sock fd
+ * @param udpBufferSize (UDP only)
  */
-u_long getAvailToRecv(int sock);
+u_long getAvailToRecv(int sock, int udpBufferSize = 0);
 
 /*
  * Get UDP Socket Max Message Size
