@@ -109,7 +109,7 @@ int PollAdhocSocket(SceNetAdhocPollSd* sds, int count, int timeout, int nonblock
 int FlushPtpSocket(int socketId);
 int NetAdhocGameMode_DeleteMaster();
 int NetAdhocctl_ExitGameMode();
-int NetAdhoc_PtpConnect(int id, int timeout, int flag, bool allowForcedConnect = true);
+int NetAdhocPtp_Connect(int id, int timeout, int flag, bool allowForcedConnect = true);
 static int sceNetAdhocPdpSend(int id, const char* mac, u32 port, void* data, int len, int timeout, int flag);
 static int sceNetAdhocPdpRecv(int id, void* addr, void* port, void* buf, void* dataLength, u32 timeout, int flag);
 
@@ -1785,14 +1785,16 @@ int NetAdhoc_SetSocketAlert(int id, s32_le flag) {
 	adhocSockets[id - 1]->flags = flg;
 	adhocSockets[id - 1]->alerted_flags = 0;
 
-	return hleDelayResult(0, "set socket alert delay", 1000);
+	return 0;
 }
 
 // Flags seems to be bitmasks of ADHOC_F_ALERT... (need more games to test this)
 int sceNetAdhocSetSocketAlert(int id, int flag) {
  	WARN_LOG_REPORT_ONCE(sceNetAdhocSetSocketAlert, SCENET, "UNTESTED sceNetAdhocSetSocketAlert(%d, %08x) at %08x", id, flag, currentMIPS->pc);
 
-	return hleLogDebug(SCENET, NetAdhoc_SetSocketAlert(id, flag), "");
+	int retval = NetAdhoc_SetSocketAlert(id, flag);
+	hleDelayResult(retval, "set socket alert delay", 1000);
+	return hleLogDebug(SCENET, retval, "");
 }
 
 int PollAdhocSocket(SceNetAdhocPollSd* sds, int count, int timeout, int nonblock) {
@@ -2338,7 +2340,7 @@ u32 NetAdhocctl_Disconnect() {
 		}
 
 		// Return Success, some games might ignore returned value and always treat it as success, otherwise repeatedly calling this function
-		return hleDelayResult(0, "disconnect delay", us);
+		return 0;
 	}
 
 	// Library uninitialized
@@ -2361,7 +2363,7 @@ static u32 sceNetAdhocctlDelHandler(u32 handlerID) {
 
 	if (adhocctlHandlers.find(handlerID) != adhocctlHandlers.end()) {
 		adhocctlHandlers.erase(handlerID);
-		INFO_LOG(SCENET, "sceNetAdhocctlDelHandler(%d)", handlerID);
+		INFO_LOG(SCENET, "sceNetAdhocctlDelHandler(%d) at %08x", handlerID, currentMIPS->pc);
 	} else {
 		WARN_LOG(SCENET, "sceNetAdhocctlDelHandler(%d): Invalid Handler ID", handlerID);
 	}
@@ -2372,6 +2374,7 @@ static u32 sceNetAdhocctlDelHandler(u32 handlerID) {
 int NetAdhocctl_Term() {
 	if (netAdhocctlInited) {
 		if (adhocctlState != ADHOCCTL_STATE_DISCONNECTED) {
+			// Note: This might block current thread if the first attempt to send OPCODE_DISCONNECT to AdhocServer failed with EAGAIN error
 			if (netAdhocGameModeEntered)
 				NetAdhocctl_ExitGameMode();
 			else
@@ -2383,6 +2386,8 @@ int NetAdhocctl_Term() {
 		if (friendFinderThread.joinable()) {
 			friendFinderThread.join();
 		}
+
+		// TODO: May need to block current thread to make sure all Adhocctl callbacks have been fully executed before terminating Adhoc PSPThread (ie. threadAdhocID).
 
 		// Clear GameMode resources
 		NetAdhocGameMode_DeleteMaster();
@@ -2418,7 +2423,7 @@ int NetAdhocctl_Term() {
 
 int sceNetAdhocctlTerm() {
 	// WLAN might be disabled in the middle of successfull multiplayer, but we still need to cleanup right?
-	INFO_LOG(SCENET, "sceNetAdhocctlTerm()");
+	INFO_LOG(SCENET, "sceNetAdhocctlTerm() at %08x", currentMIPS->pc);
 
 	//if (netAdhocMatchingInited) NetAdhocMatching_Term();
 	int retval = NetAdhocctl_Term();
@@ -2636,7 +2641,7 @@ int NetAdhocctl_Create(const char* groupName) {
 				hleEatMicro(us);
 				// Return Success
 				// FIXME: When tested using JPCSP + official prx files it seems sceNetAdhocctlCreate switching to a different thread for at least 100ms after returning success and before executing the next line.
-				return hleDelayResult(0, "create/connect/join delay", adhocEventPollDelay);
+				return 0;
 			}
 
 			// Connected State
@@ -3187,7 +3192,7 @@ static int sceNetAdhocPtpOpen(const char *srcmac, int sport, const char *dstmac,
 								changeBlockingMode(tcpsocket, 1);
 
 								// Initiate PtpConnect (ie. The Warrior seems to try to PtpSend right after PtpOpen without trying to PtpConnect first)
-								NetAdhoc_PtpConnect(i + 1, rexmt_int, 1, false);
+								NetAdhocPtp_Connect(i + 1, rexmt_int, 1, false);
 
 								// Return PTP Socket Pointer
 								return hleLogDebug(SCENET, i + 1, "success");
@@ -3436,7 +3441,7 @@ static int sceNetAdhocPtpAccept(int id, u32 peerMacAddrPtr, u32 peerPortPtr, int
 	return hleLogSuccessVerboseI(SCENET, ERROR_NET_ADHOC_NOT_INITIALIZED, "not initialized");
 }
 
-int NetAdhoc_PtpConnect(int id, int timeout, int flag, bool allowForcedConnect) {
+int NetAdhocPtp_Connect(int id, int timeout, int flag, bool allowForcedConnect) {
 	// Library is initialized
 	if (netAdhocInited)
 	{
@@ -3555,7 +3560,7 @@ static int sceNetAdhocPtpConnect(int id, int timeout, int flag) {
 		return -1;
 	}
 
-	return NetAdhoc_PtpConnect(id, timeout, flag);
+	return NetAdhocPtp_Connect(id, timeout, flag);
 }
 
 int NetAdhocPtp_Close(int id, int unknown) {
@@ -4670,8 +4675,7 @@ int NetAdhocMatching_Start(int matchingId, int evthPri, int evthPartitionId, int
 	// Multithreading Unlock
 	peerlock.unlock();
 
-	// Give a little time to make sure matching Threads are ready before the game use the next sceNet functions, should've checked for status instead of guessing the time?
-	return hleDelayResult(0, "give some time", adhocMatchingEventDelay);
+	return 0;
 }
 
 #define KERNEL_PARTITION_ID  1
@@ -4683,7 +4687,9 @@ static int sceNetAdhocMatchingStart(int matchingId, int evthPri, int evthStack, 
 	if (!g_Config.bEnableWlan)
 		return -1;
 
-	return NetAdhocMatching_Start(matchingId, evthPri, USER_PARTITION_ID, evthStack, inthPri, USER_PARTITION_ID, inthStack, optLen, optDataAddr);
+	int retval = NetAdhocMatching_Start(matchingId, evthPri, USER_PARTITION_ID, evthStack, inthPri, USER_PARTITION_ID, inthStack, optLen, optDataAddr);
+	// Give a little time to make sure matching Threads are ready before the game use the next sceNet functions, should've checked for status instead of guessing the time?
+	return hleDelayResult(retval, "give some time", adhocMatchingEventDelay);
 }
 
 // With params for Partition ID for the event & input handler stack
@@ -4692,7 +4698,9 @@ static int sceNetAdhocMatchingStart2(int matchingId, int evthPri, int evthPartit
 	if (!g_Config.bEnableWlan)
 		return -1;
 
-	return NetAdhocMatching_Start(matchingId, evthPri, evthPartitionId, evthStack, inthPri, inthPartitionId, inthStack, optLen, optDataAddr);
+	int retval = NetAdhocMatching_Start(matchingId, evthPri, evthPartitionId, evthStack, inthPri, inthPartitionId, inthStack, optLen, optDataAddr);
+	// Give a little time to make sure matching Threads are ready before the game use the next sceNet functions, should've checked for status instead of guessing the time?
+	return hleDelayResult(retval, "give some time", adhocMatchingEventDelay);
 }
 
 
