@@ -513,9 +513,11 @@ bool MediaEngine::setVideoStream(int streamNum, bool force) {
 		}
 
 		AVDictionary *opt = nullptr;
-		// Allow ffmpeg to use any number of threads it wants.  Without this, it doesn't use threads.
+		// Allow ffmpeg to use any number of threads it wants for improving performance.  Without this, it doesn't use threads.
+		// Using threads will increase the decoding delay, it requires the future frmaes are provided.
+		// However some games don't provide enough future frames, may casue blurring.
 		av_dict_set(&opt, "threads", "0", 0);
-		int openResult = avcodec_open2(m_pCodecCtx, pCodec, &opt);
+		int openResult = avcodec_open2(m_pCodecCtx, pCodec, g_Config.bDisableVideoDecodingThreads ? nullptr : &opt);
 		av_dict_free(&opt);
 		if (openResult < 0) {
 			return false;
