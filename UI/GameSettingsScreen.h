@@ -72,6 +72,7 @@ private:
 	UI::EventReturn OnControlMapping(UI::EventParams &e);
 	UI::EventReturn OnTouchControlLayout(UI::EventParams &e);
 	UI::EventReturn OnDumpNextFrameToLog(UI::EventParams &e);
+	UI::EventReturn ClearShaderCache(UI::EventParams &e);
 	UI::EventReturn OnTiltTypeChange(UI::EventParams &e);
 	UI::EventReturn OnTiltCustomize(UI::EventParams &e);
 	UI::EventReturn OnComboKey(UI::EventParams &e);
@@ -84,6 +85,7 @@ private:
 	UI::EventReturn OnTextureShader(UI::EventParams &e);
 	UI::EventReturn OnTextureShaderChange(UI::EventParams &e);
 	UI::EventReturn OnDeveloperTools(UI::EventParams &e);
+	UI::EventReturn OnHackScreen(UI::EventParams &e);
 	UI::EventReturn OnRemoteISO(UI::EventParams &e);
 	UI::EventReturn OnChangeQuickChat0(UI::EventParams &e);
 	UI::EventReturn OnChangeQuickChat1(UI::EventParams &e);
@@ -185,6 +187,16 @@ private:
 	bool allowDebugger_ = false;
 	bool canAllowDebugger_ = true;
 };
+
+class HackScreen : public UIDialogScreenWithBackground {
+public:
+	HackScreen() {}
+	void onFinish(DialogResult result) override;
+
+protected:
+	void CreateViews() override;
+};
+
 
 class HostnameSelectScreen : public PopupScreen {
 public:

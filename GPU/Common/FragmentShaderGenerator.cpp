@@ -374,6 +374,16 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "%s %s vec3 v_texcoord;\n", compat.varying_fs, highpTexcoord ? "highp" : "mediump");
 		}
 
+		// Round World far hack
+		if (g_Config.fFarCullHack != 1.0f || g_Config.bHideHudHack) {
+			WRITE(p, "%s float h_depth;\n", compat.varying_fs);
+		}
+
+		// Normal hack
+		if (g_Config.bNormalHack) {
+			WRITE(p, "%s vec3 h_normal;\n", compat.varying_fs);
+		}
+
 		if (!enableFragmentTestCache) {
 			if (enableAlphaTest && !alphaTestAgainstZero) {
 				if (compat.bitwiseOps) {
@@ -560,7 +570,33 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 						WRITE(p, "  vec4 t = %sProj(tex, %s);\n", compat.texture, texcoord);
 					} else {
 						WRITE(p, "  vec4 t = %s(tex, %s.xy);\n", compat.texture, texcoord);
-					}
+					
+						// Texture border
+						if (g_Config.fTextureBorderHack != 0.0f) {
+
+							// Sobel edge detect
+							WRITE(p, "  float dlt = 0.004;\n");
+							WRITE(p, "  vec3 lum = vec3(0.299, 0.587, 0.114);\n");
+
+							WRITE(p, "  float c0 = dot(lum, %s(tex, %s.xy+vec2(-dlt, -dlt)).rgb);\n", compat.texture, texcoord);
+							WRITE(p, "  float c1 = dot(lum, %s(tex, %s.xy+vec2(0.0, -dlt)).rgb);\n", compat.texture, texcoord);
+							WRITE(p, "  float c2 = dot(lum, %s(tex, %s.xy+vec2(dlt, -dlt)).rgb);\n", compat.texture, texcoord);
+
+							WRITE(p, "  float c3 = dot(lum, %s(tex, %s.xy+vec2(-dlt, 0.0)).rgb);\n", compat.texture, texcoord);
+							WRITE(p, "  float c5 = dot(lum, %s(tex, %s.xy+vec2(dlt, 0.0)).rgb);\n", compat.texture, texcoord);
+
+							WRITE(p, "  float c6 = dot(lum, %s(tex, %s.xy+vec2(-dlt, dlt)).rgb);\n", compat.texture, texcoord);
+							WRITE(p, "  float c7 = dot(lum, %s(tex, %s.xy+vec2(0.0, dlt)).rgb);\n", compat.texture, texcoord);
+							WRITE(p, "  float c8 = dot(lum, %s(tex, %s.xy+vec2(dlt, dlt)).rgb);\n", compat.texture, texcoord);
+
+							WRITE(p, "  float dh = c0+c1+c1+c2-(c6+c7+c7+c8);\n");
+							WRITE(p, "  float dv = c0+c3+c3+c6-(c2+c5+c5+c8);\n");
+
+							// Set edge to black
+							WRITE(p, "  if (sqrt(dh*dh+dv*dv) > %f)\n", 1.0f-g_Config.fTextureBorderHack);
+							WRITE(p, "    t.rgb = vec3(0.0);\n");
+						}
+					}	
 				} 
 			} else {
 				if (doTextureProjection) {
@@ -654,8 +690,25 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 				WRITE(p, "  }\n");
 			}
 
-			if (texFunc != GE_TEXFUNC_REPLACE || !doTextureAlpha)
+			if (texFunc != GE_TEXFUNC_REPLACE || !doTextureAlpha) {
 				WRITE(p, "  vec4 p = v_color0;\n");
+
+				if (g_Config.fToonHack != 0.0f) { // Toon hack
+					WRITE(p, "  vec4 K0 = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);\n");
+					WRITE(p, "  vec4 p0 = mix(vec4(p.bg, K0.wz), vec4(p.gb, K0.xy), step(p.b, p.g));\n");
+					WRITE(p, "  vec4 q0 = mix(vec4(p0.xyw, p.r), vec4(p.r, p0.yzx), step(p0.x, p.r));\n");
+					WRITE(p, "  float d0 = q0.x - min(q0.w, q0.y);\n"); 
+					WRITE(p, "  float e0 = 1.0e-10;\n");
+					WRITE(p, "  vec3 hsv = vec3(abs(q0.z + (q0.w - q0.y) / (6.0 * d0 + e0)), d0 / (q0.x + e0), q0.x);\n");
+					WRITE(p, "  if (hsv.z < %f)\n", g_Config.fToonHack);
+					WRITE(p, "    hsv.z = 0.4;\n");
+					WRITE(p, "  else\n");
+					WRITE(p, "    hsv.z = 1.0;\n");
+					WRITE(p, "  vec4 K1 = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n");
+					WRITE(p, "  vec3 p1 = abs(fract(hsv.xxx + K1.xyz) * 6.0 - K1.www);\n");
+					WRITE(p, "  p.rgb = hsv.z * mix(K1.xxx, clamp(p1 - K1.xxx, 0.0, 1.0), hsv.y);\n");
+				}
+			}
 
 			if (doTextureAlpha) { // texfmt == RGBA
 				switch (texFunc) {
@@ -721,7 +774,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "  vec4 v = v_color0 %s;\n", secondary);
 		}
 
-		if (enableFog) {
+		if (enableFog && !g_Config.bNoFogHack) {
 			WRITE(p, "  float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");
 			WRITE(p, "  v = mix(vec4(u_fogcolor, v.a), v, fogCoef);\n");
 		}
@@ -978,6 +1031,11 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 	}
 
+	// Round World far hack
+	if (g_Config.fFarCullHack != 1.0f) {
+		WRITE(p, "  if (h_depth > %f) v.rgb = vec3(0.0);\n", g_Config.fFarCullHack);
+	}
+
 	switch (stencilToAlpha) {
 	case REPLACE_ALPHA_DUALSOURCE:
 		WRITE(p, "  %s = vec4(v.rgb, %s);\n", compat.fragColor0, replacedAlpha);
@@ -1054,6 +1112,21 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		WRITE(p, "  return outfragment;\n");
 	} else if (compat.shaderLanguage == HLSL_D3D9) {
 		WRITE(p, "  return target;\n");
+	}
+
+	// Vertex color only hack
+	if (g_Config.bVertexColorHack)
+		WRITE(p, "  %s.rgb = v_color0.rgb;\n", compat.fragColor0);
+
+	// Normal hack
+	if (g_Config.bNormalHack) {
+		WRITE(p, "  if (h_normal.x > -0.5)\n"); // is -1.0 if we have no normal
+		WRITE(p, "    %s.rgb = h_normal.xyz;\n", compat.fragColor0);
+	}
+
+	// Hide HUD hack
+	if (g_Config.bHideHudHack) {
+		WRITE(p, "  if (h_depth < 0.001) discard;\n");
 	}
 
 	WRITE(p, "}\n");
