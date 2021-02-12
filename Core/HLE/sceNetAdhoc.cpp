@@ -403,8 +403,11 @@ int DoBlockingPdpRecv(int uid, AdhocSocketRequest& req, s64& result) {
 	memset(&sin, 0, sizeof(sin));
 	socklen_t sinlen = sizeof(sin);
 
-	int ret = recvfrom(uid, (char*)req.buffer, *req.length, MSG_PEEK | MSG_NOSIGNAL | MSG_TRUNC, (sockaddr*)&sin, &sinlen);
+	// On Windows: MSG_TRUNC are not supported on recvfrom (socket error WSAEOPNOTSUPP), so we use dummy buffer as an alternative
+	int ret = recvfrom(uid, dummyPeekBuf64k, dummyPeekBuf64kSize, MSG_PEEK | MSG_NOSIGNAL, (sockaddr*)&sin, &sinlen);
 	int sockerr = errno;
+	if (ret > 0 && *req.length > 0)
+		memcpy(req.buffer, dummyPeekBuf64k, std::min(ret, *req.length));
 
 	// Note: UDP must not be received partially, otherwise leftover data in socket's buffer will be discarded
 	if (ret >= 0 && ret <= *req.length) {
@@ -474,6 +477,7 @@ int DoBlockingPdpRecv(int uid, AdhocSocketRequest& req, s64& result) {
 		}
 		result = ERROR_NET_ADHOC_NOT_ENOUGH_SPACE;
 	}
+	// FIXME: Blocking operation with infinite timeout(0) should never get a TIMEOUT error, right? May be we should return INVALID_ARG instead if it was infinite timeout (0)?
 	else
 		result = ERROR_NET_ADHOC_TIMEOUT; // ERROR_NET_ADHOC_INVALID_ARG; // ERROR_NET_ADHOC_DISCONNECTED
 
@@ -559,7 +563,7 @@ int DoBlockingPtpSend(int uid, AdhocSocketRequest& req, s64& result) {
 		// Return Success
 		result = 0;
 	}
-	else if (ret == SOCKET_ERROR && (sockerr == EAGAIN || sockerr == EWOULDBLOCK)) {
+	else if (ret == SOCKET_ERROR && (sockerr == EAGAIN || sockerr == EWOULDBLOCK || (ptpsocket.state == ADHOC_PTP_STATE_SYN_SENT && (sockerr == ENOTCONN || connectInProgress(sockerr))))) {
 		u64 now = (u64)(time_now_d() * 1000000.0);
 		if (req.timeout == 0 || now - req.startTime <= req.timeout) {
 			return -1;
@@ -611,7 +615,7 @@ int DoBlockingPtpRecv(int uid, AdhocSocketRequest& req, s64& result) {
 
 		result = 0;
 	}
-	else if (ret == SOCKET_ERROR && (sockerr == EAGAIN || sockerr == EWOULDBLOCK)) {
+	else if (ret == SOCKET_ERROR && (sockerr == EAGAIN || sockerr == EWOULDBLOCK || (ptpsocket.state == ADHOC_PTP_STATE_SYN_SENT && (sockerr == ENOTCONN || connectInProgress(sockerr))))) {
 		u64 now = (u64)(time_now_d() * 1000000.0);
 		if (req.timeout == 0 || now - req.startTime <= req.timeout) {
 			return -1;
@@ -1666,7 +1670,11 @@ static int sceNetAdhocPdpRecv(int id, void *addr, void * port, void *buf, void *
 				
 				// Receive Data. PDP always sent in full size or nothing(failed), recvfrom will always receive in full size as requested (blocking) or failed (non-blocking). If available UDP data is larger than buffer, excess data is lost.
 				// Should peek first for the available data size if it's more than len return ERROR_NET_ADHOC_NOT_ENOUGH_SPACE along with required size in len to prevent losing excess data
-				received = recvfrom(pdpsocket.id, (char*)buf, *len, MSG_PEEK | MSG_NOSIGNAL | MSG_TRUNC, (sockaddr*)&sin, &sinlen);
+				// On Windows: MSG_TRUNC are not supported on recvfrom (socket error WSAEOPNOTSUPP), so we use dummy buffer as an alternative
+				received = recvfrom(pdpsocket.id, dummyPeekBuf64k, dummyPeekBuf64kSize, MSG_PEEK | MSG_NOSIGNAL, (sockaddr*)&sin, &sinlen);
+				if (received > 0 && *len > 0)
+					memcpy(buf, dummyPeekBuf64k, std::min(received, *len));
+
 				if (received != SOCKET_ERROR && *len < received) {
 					WARN_LOG(SCENET, "sceNetAdhocPdpRecv[%i:%u]: Peeked %u/%u bytes from %s:%u\n", id, getLocalPort(pdpsocket.id), received, *len, inet_ntoa(sin.sin_addr), ntohs(sin.sin_port));
 					*len = received;
@@ -3194,6 +3202,10 @@ static int sceNetAdhocPtpOpen(const char *srcmac, int sport, const char *dstmac,
 								// Initiate PtpConnect (ie. The Warrior seems to try to PtpSend right after PtpOpen without trying to PtpConnect first)
 								NetAdhocPtp_Connect(i + 1, rexmt_int, 1, false);
 
+								// Workaround to give some time to get connected before returning from PtpOpen over high latency
+								if (g_Config.bForcedFirstConnect && internal->attemptCount == 1)
+									hleDelayResult(i + 1, "delayed ptpopen", rexmt_int);
+
 								// Return PTP Socket Pointer
 								return hleLogDebug(SCENET, i + 1, "success");
 							}
@@ -3860,7 +3872,7 @@ static int sceNetAdhocPtpSend(int id, u32 dataAddr, u32 dataSizeAddr, int timeou
 					}
 					
 					// Non-Critical Error
-					else if (sent == SOCKET_ERROR && (error == EAGAIN || error == EWOULDBLOCK)) {
+					else if (sent == SOCKET_ERROR && (error == EAGAIN || error == EWOULDBLOCK || (ptpsocket.state == ADHOC_PTP_STATE_SYN_SENT && (error == ENOTCONN || connectInProgress(error))))) {
 						// Non-Blocking
 						if (flag) 
 							return hleLogSuccessVerboseI(SCENET, ERROR_NET_ADHOC_WOULD_BLOCK, "would block");
@@ -3945,7 +3957,7 @@ static int sceNetAdhocPtpRecv(int id, u32 dataAddr, u32 dataSizeAddr, int timeou
 					received = recv(ptpsocket.id, (char*)buf, *len, MSG_NOSIGNAL);
 					error = errno;
 
-					if (received == SOCKET_ERROR && (error == EAGAIN || error == EWOULDBLOCK)) {
+					if (received == SOCKET_ERROR && (error == EAGAIN || error == EWOULDBLOCK || (ptpsocket.state == ADHOC_PTP_STATE_SYN_SENT && (error == ENOTCONN || connectInProgress(error))))) {
 						if (flag == 0) {
 							// Simulate blocking behaviour with non-blocking socket
 							u64 threadSocketId = ((u64)__KernelGetCurThread()) << 32 | ptpsocket.id;
