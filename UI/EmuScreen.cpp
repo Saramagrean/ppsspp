@@ -1388,8 +1388,9 @@ static void DrawAudioDebugStats(DrawBuffer *draw2d, const Bounds &bounds) {
 	draw2d->SetFontScale(1.0f, 1.0f);
 }
 
-static void DrawFPS(DrawBuffer *draw2d, const Bounds &bounds) {
+static void DrawFPS(UIContext *ctx) {
 	FontID ubuntu24("UBUNTU24");
+	Bounds bounds = ctx->GetLayoutBounds();
 	float vps, fps, actual_fps;
 	__DisplayGetFPS(&vps, &fps, &actual_fps);
 	char fpsbuf[256];
@@ -1404,10 +1405,47 @@ static void DrawFPS(DrawBuffer *draw2d, const Bounds &bounds) {
 		return;
 	}
 
-	draw2d->SetFontScale(0.7f, 0.7f);
-	draw2d->DrawText(ubuntu24, fpsbuf, bounds.x2() - 8, 12, 0xc0000000, ALIGN_TOPRIGHT | FLAG_DYNAMIC_ASCII);
-	draw2d->DrawText(ubuntu24, fpsbuf, bounds.x2() - 10, 10, 0xFF3fFF3f, ALIGN_TOPRIGHT | FLAG_DYNAMIC_ASCII);
-	draw2d->SetFontScale(1.0f, 1.0f);
+	ctx->Draw()->SetFontScale(g_Config.fFPSCounterSize, g_Config.fFPSCounterSize);
+	int shadowOffset = g_Config.fFPSCounterSize*2;
+	int xPos, yPos, align;
+	float textW, textH;
+	ctx->Draw()->MeasureText(ubuntu24, fpsbuf, &textW, &textH);
+
+	switch (g_Config.iFPSCounterPosition) {
+	case 0:
+		align = ALIGN_TOPRIGHT;
+		xPos = bounds.x2() - g_Config.fFPSCounterSize*12;
+		yPos = g_Config.fFPSCounterSize*2;
+		break;
+	case 1:
+		align = ALIGN_TOPLEFT;
+		xPos = g_Config.fFPSCounterSize*12;
+		yPos = g_Config.fFPSCounterSize*2;
+		break;
+	case 2:
+		align = ALIGN_BOTTOMRIGHT;
+		xPos = bounds.x2() - g_Config.fFPSCounterSize*12;
+		yPos = bounds.y2() - g_Config.fFPSCounterSize*2;
+		break;
+	case 3:
+		align = ALIGN_BOTTOMLEFT;
+		xPos = g_Config.fFPSCounterSize*12;
+		yPos = bounds.y2() - g_Config.fFPSCounterSize*2;
+		break;
+	}
+
+	if ((g_Config.uFPSCounterBackground & 0xFF000000) != 0) {
+		ctx->Flush();
+		ctx->BeginNoTex();
+		ctx->Draw()->Rect(xPos, yPos, textW, textH, g_Config.uFPSCounterBackground, align);
+		ctx->Flush();
+		ctx->Begin();
+	}
+	if (g_Config.bFPSCounterShadow)
+		ctx->Draw()->DrawText(ubuntu24, fpsbuf, xPos+shadowOffset, yPos+shadowOffset, 0xc0000000, align | FLAG_DYNAMIC_ASCII);
+
+	ctx->Draw()->DrawText(ubuntu24, fpsbuf, xPos, yPos, g_Config.uFPSCounterColor, align | FLAG_DYNAMIC_ASCII);
+	ctx->Draw()->SetFontScale(1.0f, 1.0f);
 }
 
 static void DrawFrameTimes(UIContext *ctx, const Bounds &bounds) {
@@ -1622,7 +1660,7 @@ void EmuScreen::renderUI() {
 	}
 
 	if (g_Config.iShowFPSCounter && !invalid_) {
-		DrawFPS(draw2d, ctx->GetLayoutBounds());
+		DrawFPS(ctx);
 	}
 
 	if (g_Config.bDrawFrameGraph && !invalid_) {

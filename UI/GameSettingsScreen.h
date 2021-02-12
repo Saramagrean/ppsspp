@@ -75,6 +75,7 @@ private:
 	UI::EventReturn ClearShaderCache(UI::EventParams &e);
 	UI::EventReturn OnTiltTypeChange(UI::EventParams &e);
 	UI::EventReturn OnTiltCustomize(UI::EventParams &e);
+	UI::EventReturn OnCustomizeFPSCounterClick(UI::EventParams &e);
 
 	// Global settings handlers
 	UI::EventReturn OnLanguage(UI::EventParams &e);
@@ -250,6 +251,30 @@ private:
 	bool toResolveResult_ = false;
 	std::string lastResolved_ = "";
 	bool lastResolvedResult_ = false;
+};
+
+class ColorPickerScreen : public PopupScreen {
+public:
+	ColorPickerScreen(std::string label,  uint32_t *color) : PopupScreen(label), color_(color) {}
+	void CreatePopupContents(UI::ViewGroup *parent) override;
+	void onFinish(DialogResult result) override;
+
+	void render() override;
+
+private:
+	uint32_t *color_;
+	int red_;
+	int green_;
+	int blue_;
+	int alpha_;
+};
+
+class CustomizeFPSCounterScreen : public UIDialogScreenWithBackground {
+public:
+	void CreateViews() override;
+private:
+	UI::EventReturn OnFPSCounterColorClick(UI::EventParams &e);
+	UI::EventReturn OnFPSBackGroundColorClick(UI::EventParams &e);
 };
 
 
