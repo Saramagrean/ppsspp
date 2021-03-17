@@ -221,8 +221,8 @@ SamplerCacheKey TextureCacheCommon::GetSamplingParams(int maxLevel, const TexCac
 
 	// Filtering overrides from replacements or settings.
 	TextureFiltering forceFiltering = TEX_FILTER_AUTO;
-	u64 cachekey = replacer_.Enabled() ? entry->CacheKey() : 0;
-	if (!replacer_.Enabled() || !replacer_.FindFiltering(cachekey, entry->fullhash, &forceFiltering)) {
+	u64 cachekey = replacer_.Enabled() ? (entry ? entry->CacheKey() : 0) : 0;
+	if (!replacer_.Enabled() || entry == nullptr || !replacer_.FindFiltering(cachekey, entry->fullhash, &forceFiltering)) {
 		switch (g_Config.iTexFiltering) {
 		case TEX_FILTER_AUTO:
 			// Follow what the game wants. We just do a single heuristic change to avoid bleeding of wacky color test colors
@@ -1323,7 +1323,9 @@ void TextureCacheCommon::DecodeTextureLevel(u8 *out, int outPitch, GETextureForm
 	const u8 *texptr = Memory::GetPointer(texaddr);
 	const uint32_t byteSize = (textureBitsPerPixel[format] * bufw * h) / 8;
 
-	NotifyMemInfo(MemBlockFlags::TEXTURE, texaddr, byteSize, StringFromFormat("Texture_%08x_%dx%d_%s", texaddr, w, h, GeTextureFormatToString(format, clutformat)));
+	char buf[128];
+	size_t len = snprintf(buf, sizeof(buf), "Tex_%08x_%dx%d_%s", texaddr, w, h, GeTextureFormatToString(format, clutformat));
+	NotifyMemInfo(MemBlockFlags::TEXTURE, texaddr, byteSize, buf, len);
 
 	switch (format) {
 	case GE_TFMT_CLUT4:

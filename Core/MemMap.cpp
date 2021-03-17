@@ -129,7 +129,7 @@ inline static bool CanIgnoreView(const MemoryView &view) {
 #endif
 }
 
-#if defined(IOS) && PPSSPP_ARCH(64BIT)
+#if PPSSPP_PLATFORM(IOS) && PPSSPP_ARCH(64BIT)
 #define SKIP(a_flags, b_flags) \
 	if ((b_flags) & MV_KERNEL) \
 		continue;
@@ -459,7 +459,7 @@ void Write_Opcode_JIT(const u32 _Address, const Opcode& _Value)
 	Memory::WriteUnchecked_U32(_Value.encoding, _Address);
 }
 
-void Memset(const u32 _Address, const u8 _iValue, const u32 _iLength, const std::string &tag) {
+void Memset(const u32 _Address, const u8 _iValue, const u32 _iLength, const char *tag) {
 	if (IsValidRange(_Address, _iLength)) {
 		uint8_t *ptr = GetPointerUnchecked(_Address);
 		memset(ptr, _iValue, _iLength);
@@ -468,7 +468,7 @@ void Memset(const u32 _Address, const u8 _iValue, const u32 _iLength, const std:
 			Write_U8(_iValue, (u32)(_Address + i));
 	}
 
-	NotifyMemInfo(MemBlockFlags::WRITE, _Address, _iLength, tag);
+	NotifyMemInfo(MemBlockFlags::WRITE, _Address, _iLength, tag, strlen(tag));
 }
 
 } // namespace

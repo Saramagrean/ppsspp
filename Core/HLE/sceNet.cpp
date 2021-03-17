@@ -48,6 +48,11 @@
 #include "Core/Reporting.h"
 #include "Core/Instance.h"
 
+#if PPSSPP_PLATFORM(SWITCH) && !defined(INADDR_NONE)
+// Missing toolchain define
+#define INADDR_NONE 0xFFFFFFFF
+#endif
+
 static bool netInited;
 bool netInetInited;
 
@@ -205,7 +210,7 @@ void __NetInit() {
 
 	SceNetEtherAddr mac;
 	getLocalMac(&mac);
-	NOTICE_LOG(SCENET, "LocalHost IP will be %s [%s]", inet_ntoa(g_localhostIP.in.sin_addr), mac2str(&mac).c_str());
+	NOTICE_LOG(SCENET, "LocalHost IP will be %s [%s]", ip2str(g_localhostIP.in.sin_addr).c_str(), mac2str(&mac).c_str());
 	
 	// TODO: May be we should initialize & cleanup somewhere else than here for PortManager to be used as general purpose for whatever port forwarding PPSSPP needed
 	__UPnPInit();

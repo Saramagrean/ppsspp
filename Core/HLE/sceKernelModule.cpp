@@ -96,6 +96,11 @@ static const char * const lieAboutSuccessModules[] = {
 	"flash0:/kd/audiocodec_260.prx",
 	"flash0:/kd/libatrac3plus.prx",
 	"disc0:/PSP_GAME/SYSDIR/UPDATE/EBOOT.BIN",
+	"flash0:/kd/ifhandle.prx",
+	"flash0:/kd/pspnet.prx",
+	"flash0:/kd/pspnet_inet.prx",
+	"flash0:/kd/pspnet_apctl.prx",
+	"flash0:/kd/pspnet_resolver.prx",
 };
 
 // Modules to not load. TODO: Look into loosening this a little (say sceFont).
@@ -879,7 +884,7 @@ static void __SaveDecryptedEbootToStorageMedia(const u8 *decryptedEbootDataPtr, 
 		return;
 	}
 
-	const std::string filenameToDumpTo = g_paramSFO.GetValueString("DISC_ID") + ".BIN";
+	const std::string filenameToDumpTo = g_paramSFO.GetDiscID() + ".BIN";
 	const std::string dumpDirectory = GetSysDirectory(DIRECTORY_DUMP);
 	const std::string fullPath = dumpDirectory + filenameToDumpTo;
 
@@ -1012,8 +1017,12 @@ static bool KernelImportModuleFuncs(PSPModule *module, u32 *firstImportStubAddr,
 			}
 		}
 
+		// Prevent infinite spin on bad data.
+		if (entry->size == 0)
+			break;
+
 		// If nidData is 0, only variables are being imported.
-		if (entry->nidData != 0) {
+		if (entry->numFuncs > 0 && entry->nidData != 0) {
 			if (!Memory::IsValidAddress(entry->nidData)) {
 				ERROR_LOG_REPORT(LOADER, "Crazy nidData address %08x, skipping entire module", entry->nidData);
 				needReport = true;
@@ -1042,7 +1051,7 @@ static bool KernelImportModuleFuncs(PSPModule *module, u32 *firstImportStubAddr,
 
 		// We skip vars when reimporting, since we might double-offset.
 		// We only reimport funcs, which can't be double-offset.
-		if (entry->varData != 0 && !reimporting) {
+		if (entry->numVars > 0 && entry->varData != 0 && !reimporting) {
 			if (!Memory::IsValidAddress(entry->varData)) {
 				ERROR_LOG_REPORT(LOADER, "Crazy varData address %08x, skipping rest of module", entry->varData);
 				needReport = true;
@@ -1342,7 +1351,7 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 
 	if (textSection == -1) {
 		module->textStart = reader.GetVaddr();
-		module->textEnd = firstImportStubAddr - 4;
+		module->textEnd = firstImportStubAddr == 0 ? reader.GetVaddr() : firstImportStubAddr - 4;
 		// Reference Jpcsp.
 		if (reader.GetFirstSegmentAlign() > 0)
 			module->textStart &= ~(reader.GetFirstSegmentAlign() - 1);
@@ -2076,16 +2085,6 @@ int KernelStartModule(SceUID moduleId, u32 argsize, u32 argAddr, u32 returnValue
 		entryAddr = module->nm.module_start_func;
 		if (module->nm.module_start_thread_attr != 0)
 			attribute = module->nm.module_start_thread_attr;
-	} else if (entryAddr == (u32)-1 || entryAddr == module->memoryBlockAddr - 1) {
-		if (smoption) {
-			// TODO: Does sceKernelStartModule() really give an error when no entry only if you pass options?
-			attribute = smoption->attribute;
-		} else {
-			// TODO: Why are we just returning the module ID in this case?
-			WARN_LOG(SCEMODULE, "sceKernelStartModule(): module has no start or entry func");
-			module->nm.status = MODULE_STATUS_STARTED;
-			return moduleId;
-		}
 	}
 
 	if (Memory::IsValidAddress(entryAddr)) {
@@ -2101,6 +2100,8 @@ int KernelStartModule(SceUID moduleId, u32 argsize, u32 argAddr, u32 returnValue
 			stacksize = module->nm.module_start_thread_stacksize;
 		}
 
+		// TODO: Why do we skip smoption->attribute here?
+
 		SceUID threadID = __KernelCreateThread(module->nm.name, moduleId, entryAddr, priority, stacksize, attribute, 0, (module->nm.attribute & 0x1000) != 0);
 		__KernelStartThreadValidate(threadID, argsize, argAddr);
 		__KernelSetThreadRA(threadID, NID_MODULERETURN);
@@ -2108,7 +2109,7 @@ int KernelStartModule(SceUID moduleId, u32 argsize, u32 argAddr, u32 returnValue
 		if (needsWait) {
 			*needsWait = true;
 		}
-	} else if (entryAddr == 0) {
+	} else if (entryAddr == 0 || entryAddr == (u32)-1) {
 		INFO_LOG(SCEMODULE, "sceKernelStartModule(%d,asize=%08x,aptr=%08x,retptr=%08x): no entry address", moduleId, argsize, argAddr, returnValueAddr);
 		module->nm.status = MODULE_STATUS_STARTED;
 	} else {
