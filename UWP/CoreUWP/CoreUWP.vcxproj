@@ -204,8 +204,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x86/include;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x86/include;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -219,8 +219,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x86/include;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x86/include;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -234,8 +234,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x86/include;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x86/include;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -249,8 +249,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -264,8 +264,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -279,8 +279,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -294,8 +294,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -309,8 +309,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -324,8 +324,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/ARM64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -339,8 +339,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -354,8 +354,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -369,8 +369,8 @@
       <CompileAsWinRT>false</CompileAsWinRT>
       <SDLCheck>false</SDLCheck>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
-      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_FFMPEG;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../../ffmpeg/Windows10/x64/include;../../ffmpeg/WindowsInclude;../..;../../ext/native;../../ext/snappy;../../ext/libpng17;../../Common;../../ext/zlib;../../ext/zstd/lib;../../ext;$(ProjectDir);$(GeneratedFilesDir);$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>USE_FFMPEG;WITH_UPNP;_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -404,6 +404,7 @@
     <ClInclude Include="..\..\Core\Debugger\WebSocket\InputSubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\LogBroadcaster.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\MemorySubscriber.h" />
+    <ClInclude Include="..\..\Core\Debugger\WebSocket\MemoryInfoSubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\SteppingBroadcaster.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\SteppingSubscriber.h" />
     <ClInclude Include="..\..\Core\Debugger\WebSocket\WebSocketUtils.h" />
@@ -637,6 +638,7 @@
     <ClCompile Include="..\..\Core\Debugger\WebSocket\InputSubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\LogBroadcaster.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\MemorySubscriber.cpp" />
+    <ClCompile Include="..\..\Core\Debugger\WebSocket\MemoryInfoSubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\SteppingBroadcaster.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\SteppingSubscriber.cpp" />
     <ClCompile Include="..\..\Core\Debugger\WebSocket\WebSocketUtils.cpp" />

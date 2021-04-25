@@ -1309,12 +1309,8 @@ bool MainScreen::DrawBackgroundFor(UIContext &dc, const std::string &gamePath, f
 		return false;
 	}
 
-	Draw::Texture *texture = nullptr;
-	if (ginfo->pic1.texture) {
-		texture = ginfo->pic1.texture->GetTexture();
-	} else if (ginfo->pic0.texture) {
-		texture = ginfo->pic0.texture->GetTexture();
-	}
+	auto pic = ginfo->GetBGPic();
+	Draw::Texture *texture = pic ? pic->texture->GetTexture() : nullptr;
 
 	uint32_t color = whiteAlpha(ease(progress)) & 0xFFc0c0c0;
 	if (texture) {
@@ -1566,8 +1562,6 @@ void GridSettingsScreen::CreatePopupContents(UI::ViewGroup *parent) {
 		items->Add(new ItemHeader(sy->T("Clear Recent")));
 		items->Add(new Choice(sy->T("Clear Recent Games List")))->OnClick.Handle(this, &GridSettingsScreen::OnRecentClearClick);
 	}
-
-	items->Add(new Choice(di->T("Back")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 
 	scroll->Add(items);
 	parent->Add(scroll);

@@ -77,10 +77,12 @@ bool TextureReplacer::LoadIni() {
 	aliases_.clear();
 	hashranges_.clear();
 	filtering_.clear();
+	reducehashranges_.clear();
 
 	allowVideo_ = false;
 	ignoreAddress_ = false;
 	reduceHash_ = false;
+	reduceHashGlobalValue = 0.5;
 	// Prevents dumping the mipmaps.
 	ignoreMipmap_ = false;
 
@@ -192,6 +194,14 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, bool isOverride) {
 		}
 	}
 
+	if (ini.HasSection("reducehashranges")) {
+		auto reducehashranges = ini.GetOrCreateSection("reducehashranges")->ToMap();
+		// Format: w,h = reducehashvalues 
+		for (const auto& item : reducehashranges) {
+			ParseReduceHashRange(item.first, item.second);
+		}
+	}
+
 	return true;
 }
 
@@ -247,6 +257,39 @@ void TextureReplacer::ParseFiltering(const std::string &key, const std::string &
 	}
 }
 
+void TextureReplacer::ParseReduceHashRange(const std::string& key, const std::string& value) {
+	std::vector<std::string> keyParts;
+	SplitString(key, ',', keyParts);
+	std::vector<std::string> valueParts;
+	SplitString(value, ',', valueParts);
+
+	if (keyParts.size() != 2 || valueParts.size() != 1) {
+		ERROR_LOG(G3D, "Ignoring invalid reducehashrange %s = %s, expecting w,h = reducehashvalue", key.c_str(), value.c_str());
+		return;
+	}
+
+	u32 forW;
+	u32 forH;
+	if (!TryParse(keyParts[0], &forW) || !TryParse(keyParts[1], &forH)) {
+		ERROR_LOG(G3D, "Ignoring invalid reducehashrange %s = %s, key format is 512,512", key.c_str(), value.c_str());
+		return;
+	}
+
+	float rhashvalue;
+	if (!TryParse(valueParts[0], &rhashvalue)) {
+		ERROR_LOG(G3D, "Ignoring invalid reducehashrange %s = %s, value format is 0.5", key.c_str(), value.c_str());
+		return;
+	}
+
+	if (rhashvalue == 0) {
+		ERROR_LOG(G3D, "Ignoring invalid hashrange %s = %s, reducehashvalue can't be 0", key.c_str(), value.c_str());
+		return;
+	}
+
+	const u64 reducerangeKey = ((u64)forW << 16) | forH;
+	reducehashranges_[reducerangeKey] = rhashvalue;
+} 
+
 u32 TextureReplacer::ComputeHash(u32 addr, int bufw, int w, int h, GETextureFormat fmt, u16 maxSeenV) {
 	_dbg_assert_msg_(enabled_, "Replacement not enabled");
 
@@ -258,9 +301,10 @@ u32 TextureReplacer::ComputeHash(u32 addr, int bufw, int w, int h, GETextureForm
 	}
 
 	const u8 *checkp = Memory::GetPointer(addr);
-	float reduceHashSize = 1.0;
-	if (reduceHash_)
-		reduceHashSize = 0.5;
+	if (reduceHash_) {
+		reduceHashSize = LookupReduceHashRange(w, h);
+		// default to reduceHashGlobalValue which default is 0.5
+	}
 	if (bufw <= w) {
 		// We can assume the data is contiguous.  These are the total used pixels.
 		const u32 totalPixels = bufw * h + (w - bufw);
@@ -629,6 +673,18 @@ bool TextureReplacer::LookupHashRange(u32 addr, int &w, int &h) {
 	return false;
 }
 
+float TextureReplacer::LookupReduceHashRange(int& w, int& h) {
+	const u64 reducerangeKey = ((u64)w << 16) | h;
+	auto range = reducehashranges_.find(reducerangeKey);
+	if (range != reducehashranges_.end()) {
+		float rhv = range->second;
+		return rhv;
+	}
+	else {
+		return reduceHashGlobalValue;
+	}
+}
+
 void ReplacedTexture::Load(int level, void *out, int rowPitch) {
 	_assert_msg_((size_t)level < levels_.size(), "Invalid miplevel");
 	_assert_msg_(out != nullptr && rowPitch > 0, "Invalid out/pitch");
@@ -713,6 +769,8 @@ bool TextureReplacer::GenerateIni(const std::string &gameID, std::string *genera
 		fs << "[hashranges]\n";
 		fs << "\n";
 		fs << "[filtering]\n";
+		fs << "\n";
+		fs << "[reducehashranges]\n";
 		fs.close();
 	}
 	return File::Exists(texturesDirectory + INI_FILENAME);

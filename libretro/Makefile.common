@@ -6,6 +6,7 @@ GPUCOMMONDIR		= $(CORE_DIR)/GPU/Common
 GPUDIR			= $(CORE_DIR)/GPU
 EXTDIR			= $(CORE_DIR)/ext
 NATIVEDIR		= $(EXTDIR)/native
+ZSTDDIR                 = $(EXTDIR)/zstd/lib
 
 SOURCES_CXX   :=
 SOURCES_C     :=
@@ -18,11 +19,13 @@ INCFLAGS += \
 	-I$(EXTDIR)/glslang \
 	-I$(EXTDIR)/native \
 	-I$(EXTDIR)/zlib \
+	-I$(ZSTDDIR) \
 	-I$(EXTDIR)/snappy \
 	-I$(FFMPEGDIR) \
 	$(FFMPEGINCFLAGS) \
 	-I$(EXTDIR)/cityhash \
 	-I$(EXTDIR)/armips \
+	-I$(EXTDIR)/zstd/lib \
 	-I$(EXTDIR) \
 	-I$(NATIVEDIR) \
 	-I$(EXTDIR)/libpng17 \
@@ -214,13 +217,17 @@ SOURCES_CXX += \
 	$(COMMONDIR)/UI/View.cpp \
 	$(COMMONDIR)/UI/ViewGroup.cpp \
 	$(COMMONDIR)/System/Display.cpp \
+	$(COMMONDIR)/ArmCPUDetect.cpp \
+	$(COMMONDIR)/CPUDetect.cpp \
 	$(COMMONDIR)/Buffer.cpp \
 	$(COMMONDIR)/ConsoleListener.cpp \
 	$(COMMONDIR)/ExceptionHandlerSetup.cpp \
+	$(COMMONDIR)/FakeCPUDetect.cpp \
 	$(COMMONDIR)/Log.cpp \
 	$(COMMONDIR)/LogManager.cpp \
 	$(COMMONDIR)/OSVersion.cpp \
 	$(COMMONDIR)/MemoryUtil.cpp \
+	$(COMMONDIR)/MipsCPUDetect.cpp \
 	$(COMMONDIR)/SysError.cpp \
 	$(COMMONDIR)/StringUtils.cpp \
 	$(COMMONDIR)/TimeUtil.cpp
@@ -336,6 +343,7 @@ SOURCES_CXX += $(COMMONDIR)/MemArenaAndroid.cpp \
 	       $(EXTDIR)/glslang/glslang/OSDependent/Unix/ossource.cpp \
 		   $(COMMONDIR)/Render/Text/draw_text_android.cpp
 else
+COREFLAGS += -DVK_USE_PLATFORM_XLIB_KHR
 SOURCES_CXX += $(COMMONDIR)/MemArenaPosix.cpp \
 	       $(EXTDIR)/glslang/glslang/OSDependent/Unix/ossource.cpp
 endif
@@ -518,7 +526,6 @@ ifeq ($(WITH_DYNAREC),1)
    ifeq ($(TARGET_ARCH),arm)
       DYNAFLAGS += -D_ARCH_32
 		SOURCES_CXX += $(COMMONDIR)/ArmEmitter.cpp \
-			       $(COMMONDIR)/ArmCPUDetect.cpp \
 			       $(COREDIR)/MIPS/ARM/ArmAsm.cpp \
 			       $(COREDIR)/MIPS/ARM/ArmCompALU.cpp \
 			       $(COREDIR)/MIPS/ARM/ArmCompBranch.cpp \
@@ -548,7 +555,6 @@ ifeq ($(WITH_DYNAREC),1)
 	else ifeq ($(TARGET_ARCH),arm64)
       DYNAFLAGS += -D_ARCH_64
       SOURCES_CXX += $(COMMONDIR)/Arm64Emitter.cpp \
-		     $(COMMONDIR)/ArmCPUDetect.cpp \
 		     $(COREDIR)/MIPS/ARM64/Arm64Asm.cpp \
 		     $(COREDIR)/MIPS/ARM64/Arm64CompALU.cpp \
 		     $(COREDIR)/MIPS/ARM64/Arm64CompBranch.cpp \
@@ -583,7 +589,7 @@ ifeq ($(WITH_DYNAREC),1)
 		CPUFLAGS += -D_M_IX86_FP
 	else
 		CPUFLAGS += -msse -msse2
-endif
+	endif
       ifeq ($(TARGET_ARCH),x86_64)
          CPUFLAGS += -D_M_X64 -D_ARCH_64
       else
@@ -597,7 +603,6 @@ endif
 						$(COMMONDIR)/x64Analyzer.cpp \
 						$(COMMONDIR)/ABI.cpp \
 						$(COMMONDIR)/Thunk.cpp \
-						$(COMMONDIR)/CPUDetect.cpp \
 						$(COREDIR)/MIPS/x86/CompReplace.cpp \
 						$(COREDIR)/MIPS/x86/CompBranch.cpp \
 						$(COREDIR)/MIPS/x86/Asm.cpp \
@@ -624,6 +629,7 @@ SOURCES_C += $(EXTDIR)/udis86/decode.c \
 
 INCFLAGS += -I$(EXTDIR)/miniupnp-build
 SOURCES_C += \
+    $(EXTDIR)/miniupnp/miniupnpc/addr_is_reserved.c \
     $(EXTDIR)/miniupnp/miniupnpc/connecthostport.c \
     $(EXTDIR)/miniupnp/miniupnpc/igd_desc_parse.c \
     $(EXTDIR)/miniupnp/miniupnpc/minisoap.c \
@@ -654,11 +660,6 @@ SOURCES_CXX += \
 	$(LIBRETRODIR)/LibretroVulkanContext.cpp \
 	$(LIBRETRODIR)/libretro_vulkan.cpp
 
-ifneq ($(PLATFORM_EXT), darwin)
-	ifeq ($(PLATFORM_EXT), unix)
-		COREFLAGS += -DVK_USE_PLATFORM_XLIB_KHR
-	endif
-endif
 
 ifeq ($(PLATFORM_EXT), win32)
 SOURCES_CXX += \
@@ -702,6 +703,40 @@ SOURCES_CXX += \
 		$(LIBRETRODIR)/LibretroGraphicsContext.cpp \
 		$(LIBRETRODIR)/LibretroGLContext.cpp \
 		$(LIBRETRODIR)/LibretroGLCoreContext.cpp
+
+SOURCES_C +=   $(ZSTDDIR)/common/debug.c \
+               $(ZSTDDIR)/common/entropy_common.c \
+               $(ZSTDDIR)/common/error_private.c \
+               $(ZSTDDIR)/common/fse_decompress.c \
+               $(ZSTDDIR)/common/pool.c \
+               $(ZSTDDIR)/common/threading.c
+
+#SOURCES_C +=   $(ZSTDDIR)/common/xxhash.c
+
+SOURCES_C +=   \
+               $(ZSTDDIR)/common/zstd_common.c \
+               $(ZSTDDIR)/common/zstd_trace.c \
+               $(ZSTDDIR)/compress/fse_compress.c \
+               $(ZSTDDIR)/compress/hist.c \
+               $(ZSTDDIR)/compress/huf_compress.c \
+               $(ZSTDDIR)/compress/zstd_compress.c \
+               $(ZSTDDIR)/compress/zstd_compress_literals.c \
+               $(ZSTDDIR)/compress/zstd_compress_sequences.c \
+               $(ZSTDDIR)/compress/zstd_compress_superblock.c \
+               $(ZSTDDIR)/compress/zstd_double_fast.c \
+               $(ZSTDDIR)/compress/zstd_fast.c \
+               $(ZSTDDIR)/compress/zstd_lazy.c \
+               $(ZSTDDIR)/compress/zstd_ldm.c \
+               $(ZSTDDIR)/compress/zstd_opt.c \
+               $(ZSTDDIR)/compress/zstdmt_compress.c \
+               $(ZSTDDIR)/decompress/huf_decompress.c \
+               $(ZSTDDIR)/decompress/zstd_ddict.c \
+               $(ZSTDDIR)/decompress/zstd_decompress.c \
+               $(ZSTDDIR)/decompress/zstd_decompress_block.c \
+               $(ZSTDDIR)/dictBuilder/cover.c \
+               $(ZSTDDIR)/dictBuilder/divsufsort.c \
+               $(ZSTDDIR)/dictBuilder/fastcover.c \
+               $(ZSTDDIR)/dictBuilder/zdict.c
 
 ifneq ($(STATIC_LINKING), 1)
 SOURCES_C += \

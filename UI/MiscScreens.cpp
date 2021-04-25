@@ -73,7 +73,137 @@ static const uint32_t colors[4] = {
 
 static std::unique_ptr<ManagedTexture> bgTexture;
 
-static bool backgroundInited;
+class Animation {
+public:
+	virtual ~Animation() {}
+	virtual void Draw(UIContext &dc, double t, float alpha) = 0;
+};
+
+class FloatingSymbolsAnimation : public Animation {
+public:
+	~FloatingSymbolsAnimation() override {}
+	void Draw(UIContext &dc, double t, float alpha) override {
+		float xres = dc.GetBounds().w;
+		float yres = dc.GetBounds().h;
+		if (last_xres != xres || last_yres != yres) {
+			Regenerate(xres, yres);
+		}
+
+		for (int i = 0; i < COUNT; i++) {
+			float x = xbase[i] + dc.GetBounds().x;
+			float y = ybase[i] + dc.GetBounds().y + 40 * cosf(i * 7.2f + t * 1.3f);
+			float angle = (float)sin(i + t);
+			int n = i & 3;
+			ui_draw2d.DrawImageRotated(symbols[n], x, y, 1.0f, angle, colorAlpha(colors[n], alpha * 0.1f));
+		}
+	}
+
+private:
+	static constexpr int COUNT = 100;
+
+	float xbase[COUNT]{};
+	float ybase[COUNT]{};
+	float last_xres = 0;
+	float last_yres = 0;
+
+	void Regenerate(int xres, int yres) {
+		GMRng rng;
+		for (int i = 0; i < COUNT; i++) {
+			xbase[i] = rng.F() * xres;
+			ybase[i] = rng.F() * yres;
+		}
+
+		last_xres = xres;
+		last_yres = yres;
+	}
+};
+
+class RecentGamesAnimation : public Animation {
+public:
+	~RecentGamesAnimation() override {}
+	void Draw(UIContext &dc, double t, float alpha) override {
+		if (lastIndex_ == nextIndex_) {
+			CheckNext(dc, t);
+		} else if (t > nextT_) {
+			lastIndex_ = nextIndex_;
+		}
+
+		if (!g_Config.recentIsos.empty()) {
+			std::shared_ptr<GameInfo> lastInfo = GetInfo(dc, lastIndex_);
+			std::shared_ptr<GameInfo> nextInfo = GetInfo(dc, nextIndex_);
+			dc.Flush();
+
+			float lastAmount = Clamp((float)(nextT_ - t) * 1.0f / TRANSITION, 0.0f, 1.0f);
+			DrawTex(dc, lastInfo, lastAmount * alpha * 0.2f);
+
+			float nextAmount = lastAmount <= 0.0f ? 1.0f : 1.0f - lastAmount;
+			DrawTex(dc, nextInfo, nextAmount * alpha * 0.2f);
+
+			dc.RebindTexture();
+		}
+	}
+
+private:
+	void CheckNext(UIContext &dc, double t) {
+		if (g_Config.recentIsos.empty()) {
+			return;
+		}
+
+		for (int index = lastIndex_ + 1; index != lastIndex_; ++index) {
+			if (index < 0 || index >= (int)g_Config.recentIsos.size()) {
+				if (lastIndex_ == -1)
+					break;
+				index = 0;
+			}
+
+			std::shared_ptr<GameInfo> ginfo = GetInfo(dc, index);
+			if (ginfo && ginfo->pending) {
+				// Wait for it to load.  It might be the next one.
+				break;
+			}
+			if (ginfo && (ginfo->pic1.texture || ginfo->pic0.texture)) {
+				nextIndex_ = index;
+				nextT_ = t + INTERVAL;
+				break;
+			}
+
+			// Otherwise, keep going.  This skips games with no BG.
+		}
+	}
+
+	std::shared_ptr<GameInfo> GetInfo(UIContext &dc, int index) {
+		if (index < 0) {
+			return nullptr;
+		}
+		return g_gameInfoCache->GetInfo(dc.GetDrawContext(), g_Config.recentIsos[index], GAMEINFO_WANTBG);
+	}
+
+	void DrawTex(UIContext &dc, std::shared_ptr<GameInfo> &ginfo, float amount) {
+		if (!ginfo || amount <= 0.0f)
+			return;
+		GameInfoTex *pic = ginfo->GetBGPic();
+		if (!pic)
+			return;
+
+		dc.GetDrawContext()->BindTexture(0, pic->texture->GetTexture());
+		uint32_t color = whiteAlpha(amount) & 0xFFc0c0c0;
+		dc.Draw()->DrawTexRect(dc.GetBounds(), 0, 0, 1, 1, color);
+		dc.Flush();
+	}
+
+	static constexpr double INTERVAL = 8.0;
+	static constexpr float TRANSITION = 3.0f;
+
+	int lastIndex_ = -1;
+	int nextIndex_ = -1;
+	double nextT_ = -INTERVAL;
+};
+
+// TODO: Add more styles. Remember to add to the enum in Config.cpp and the selector in GameSettings too.
+
+static BackgroundAnimation g_CurBackgroundAnimation = BackgroundAnimation::OFF;
+static std::unique_ptr<Animation> g_Animation;
+static bool bgTextureInited = false;
 
 void UIBackgroundInit(UIContext &dc) {
 	const std::string bgPng = GetSysDirectory(DIRECTORY_SYSTEM) + "background.png";
@@ -86,32 +216,31 @@ void UIBackgroundInit(UIContext &dc) {
 
 void UIBackgroundShutdown() {
 	bgTexture.reset(nullptr);
-	backgroundInited = false;
+	g_Animation.reset(nullptr);
+	g_CurBackgroundAnimation = BackgroundAnimation::OFF;
+	bgTextureInited = false;
 }
 
 void DrawBackground(UIContext &dc, float alpha) {
-	if (!backgroundInited) {
+	if (!bgTextureInited) {
 		UIBackgroundInit(dc);
-		backgroundInited = true;
+		bgTextureInited = true;
 	}
+	if (g_CurBackgroundAnimation != (BackgroundAnimation)g_Config.iBackgroundAnimation) {
+		g_CurBackgroundAnimation = (BackgroundAnimation)g_Config.iBackgroundAnimation;
 
-	static float xbase[100] = {0};
-	static float ybase[100] = {0};
-	float xres = dc.GetBounds().w;
-	float yres = dc.GetBounds().h;
-	static int last_xres = 0;
-	static int last_yres = 0;
-
-	if (xbase[0] == 0.0f || last_xres != xres || last_yres != yres) {
-		GMRng rng;
-		for (int i = 0; i < 100; i++) {
-			xbase[i] = rng.F() * xres;
-			ybase[i] = rng.F() * yres;
+		switch (g_CurBackgroundAnimation) {
+		case BackgroundAnimation::FLOATING_SYMBOLS:
+			g_Animation.reset(new FloatingSymbolsAnimation());
+			break;
+		case BackgroundAnimation::RECENT_GAMES:
+			g_Animation.reset(new RecentGamesAnimation());
+			break;
+		default:
+			g_Animation.reset(nullptr);
 		}
-		last_xres = xres;
-		last_yres = yres;
 	}
-	
+
 	uint32_t bgColor = whiteAlpha(alpha);
 
 	if (bgTexture != nullptr) {
@@ -135,12 +264,9 @@ void DrawBackground(UIContext &dc, float alpha) {
 #else
 	double t = time_now_d();
 #endif
-	for (int i = 0; i < 100; i++) {
-		float x = xbase[i] + dc.GetBounds().x;
-		float y = ybase[i] + dc.GetBounds().y + 40 * cosf(i * 7.2f + t * 1.3f);
-		float angle = (float)sin(i + t);
-		int n = i & 3;
-		ui_draw2d.DrawImageRotated(symbols[n], x, y, 1.0f, angle, colorAlpha(colors[n], alpha * 0.1f));
+
+	if (g_Animation) {
+		g_Animation->Draw(dc, t, alpha);
 	}
 }
 
@@ -150,19 +276,12 @@ void DrawGameBackground(UIContext &dc, const std::string &gamePath) {
 		ginfo = g_gameInfoCache->GetInfo(dc.GetDrawContext(), gamePath, GAMEINFO_WANTBG);
 	dc.Flush();
 
-	bool hasPic = false;
-	double loadTime;
-	if (ginfo && ginfo->pic1.texture) {
-		dc.GetDrawContext()->BindTexture(0, ginfo->pic1.texture->GetTexture());
-		loadTime = ginfo->pic1.timeLoaded;
-		hasPic = true;
-	} else if (ginfo && ginfo->pic0.texture) {
-		dc.GetDrawContext()->BindTexture(0, ginfo->pic0.texture->GetTexture());
-		loadTime = ginfo->pic0.timeLoaded;
-		hasPic = true;
+	GameInfoTex *pic = ginfo ? ginfo->GetBGPic() : nullptr;
+	if (pic) {
+		dc.GetDrawContext()->BindTexture(0, pic->texture->GetTexture());
 	}
-	if (hasPic) {
-		uint32_t color = whiteAlpha(ease((time_now_d() - loadTime) * 3)) & 0xFFc0c0c0;
+	if (pic) {
+		uint32_t color = whiteAlpha(ease((time_now_d() - pic->timeLoaded) * 3)) & 0xFFc0c0c0;
 		dc.Draw()->DrawTexRect(dc.GetBounds(), 0,0,1,1, color);
 		dc.Flush();
 		dc.RebindTexture();
@@ -318,10 +437,11 @@ PostProcScreen::PostProcScreen(const std::string &title, int id) : ListPopupScre
 	shaders_ = GetAllPostShaderInfo();
 	std::vector<std::string> items;
 	int selected = -1;
+	const std::string selectedName = id_ >= g_Config.vPostShaderNames.size() ? "Off" : g_Config.vPostShaderNames[id_];
 	for (int i = 0; i < (int)shaders_.size(); i++) {
 		if (!shaders_[i].visible)
 			continue;
-		if (shaders_[i].section == g_Config.vPostShaderNames[id_])
+		if (shaders_[i].section == selectedName)
 			selected = i;
 		items.push_back(ps->T(shaders_[i].section.c_str(), shaders_[i].name.c_str()));
 	}
@@ -331,7 +451,11 @@ PostProcScreen::PostProcScreen(const std::string &title, int id) : ListPopupScre
 void PostProcScreen::OnCompleted(DialogResult result) {
 	if (result != DR_OK)
 		return;
-	g_Config.vPostShaderNames[id_] = shaders_[listView_->GetSelected()].section;
+	const std::string &value = shaders_[listView_->GetSelected()].section;
+	if (id_ < g_Config.vPostShaderNames.size())
+		g_Config.vPostShaderNames[id_] = value;
+	else
+		g_Config.vPostShaderNames.push_back(value);
 }
 
 TextureShaderScreen::TextureShaderScreen(const std::string &title) : ListPopupScreen(title) {
