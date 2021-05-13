@@ -40,7 +40,7 @@ StorageFileLoader::~StorageFileLoader() {
 }
 
 void StorageFileLoader::threadfunc() {
-	setCurrentThreadName("StorageFileLoader");
+	SetCurrentThreadName("StorageFileLoader");
 
 
 	{
@@ -131,12 +131,8 @@ s64 StorageFileLoader::FileSize() {
 	return size_;
 }
 
-std::string StorageFileLoader::Path() const {
+std::string StorageFileLoader::GetPath() const {
 	return path_;
-}
-
-std::string StorageFileLoader::Extension() {
-	return "." + getFileExtension(path_);
 }
 
 void StorageFileLoader::EnsureOpen() {

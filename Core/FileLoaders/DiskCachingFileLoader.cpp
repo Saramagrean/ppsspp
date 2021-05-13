@@ -133,7 +133,7 @@ std::vector<std::string> DiskCachingFileLoader::GetCachedPathsInUse() {
 void DiskCachingFileLoader::InitCache() {
 	std::lock_guard<std::mutex> guard(cachesMutex_);
 
-	std::string path = ProxiedFileLoader::Path();
+	std::string path = ProxiedFileLoader::GetPath();
 	auto &entry = caches_[path];
 	if (!entry) {
 		entry = new DiskCachingFileLoaderCache(path, filesize_);
@@ -149,7 +149,7 @@ void DiskCachingFileLoader::ShutdownCache() {
 	if (cache_->Release()) {
 		// If it ran out of counts, delete it.
 		delete cache_;
-		caches_.erase(ProxiedFileLoader::Path());
+		caches_.erase(ProxiedFileLoader::GetPath());
 	}
 	cache_ = nullptr;
 }
@@ -794,8 +794,8 @@ u32 DiskCachingFileLoaderCache::CountCachedFiles() {
 		dir = GetSysDirectory(DIRECTORY_CACHE);
 	}
 
-	std::vector<FileInfo> files;
-	return (u32)getFilesInDir(dir.c_str(), &files, "ppdc:");
+	std::vector<File::FileInfo> files;
+	return (u32)GetFilesInDir(dir.c_str(), &files, "ppdc:");
 }
 
 void DiskCachingFileLoaderCache::GarbageCollectCacheFiles(u64 goalBytes) {
@@ -811,12 +811,12 @@ void DiskCachingFileLoaderCache::GarbageCollectCacheFiles(u64 goalBytes) {
 		dir = GetSysDirectory(DIRECTORY_CACHE);
 	}
 
-	std::vector<FileInfo> files;
-	getFilesInDir(dir.c_str(), &files, "ppdc:");
+	std::vector<File::FileInfo> files;
+	File::GetFilesInDir(dir.c_str(), &files, "ppdc:");
 
 	u64 remaining = goalBytes;
 	// TODO: Could order by LRU or etc.
-	for (FileInfo file : files) {
+	for (File::FileInfo &file : files) {
 		if (file.isDirectory) {
 			continue;
 		}

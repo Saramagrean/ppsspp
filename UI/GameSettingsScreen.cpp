@@ -958,25 +958,21 @@ void GameSettingsScreen::CreateViews() {
 			SavePathInMyDocumentChoice->SetEnabled(false);
 	} else {
 		if (installed_ && myDocsExists) {
-#ifdef _MSC_VER
-			std::ifstream inputFile(ConvertUTF8ToWString(installedFile));
-#else
-			std::ifstream inputFile(installedFile);
-#endif
-			if (!inputFile.fail() && inputFile.is_open()) {
-				std::string tempString;
-				std::getline(inputFile, tempString);
-
+			FILE *testInstalled = File::OpenCFile(installedFile, "rt");
+			if (testInstalled) {
+				char temp[2048];
+				char *tempStr = fgets(temp, sizeof(temp), testInstalled);
 				// Skip UTF-8 encoding bytes if there are any. There are 3 of them.
-				if (tempString.substr(0, 3) == "\xEF\xBB\xBF")
-					tempString = tempString.substr(3);
+				if (tempStr && strncmp(tempStr, "\xEF\xBB\xBF", 3) == 0) {
+					tempStr += 3;
+				}
 				SavePathInOtherChoice->SetEnabled(!PSP_IsInited());
-				if (!(tempString == "")) {
+				if (tempStr && strlen(tempStr) != 0 && strcmp(tempStr, "\n") != 0) {
 					installed_ = false;
 					otherinstalled_ = true;
 				}
+				fclose(testInstalled);
 			}
-			inputFile.close();
 		} else if (!myDocsExists) {
 			SavePathInMyDocumentChoice->SetEnabled(false);
 		}
@@ -1150,10 +1146,9 @@ UI::EventReturn GameSettingsScreen::OnSavePathMydoc(UI::EventParams &e) {
 		installed_ = false;
 		g_Config.memStickDirectory = PPSSPPpath + "memstick/";
 	} else {
-		std::ofstream myfile;
-		myfile.open(PPSSPPpath + "installed.txt");
-		if (myfile.is_open()){
-			myfile.close();
+		FILE *f = File::OpenCFile(PPSSPPpath + "installed.txt", "wb");
+		if (f) {
+			fclose(f);
 		}
 
 		const std::string myDocsPath = W32Util::UserDocumentsPath() + "/PPSSPP/";
@@ -1293,7 +1288,6 @@ void GameSettingsScreen::sendMessage(const char *message, const char *value) {
 	}
 }
 
-#if PPSSPP_PLATFORM(ANDROID)
 void GameSettingsScreen::CallbackMemstickFolder(bool yes) {
 	auto sy = GetI18NCategory("System");
 
@@ -1305,20 +1299,19 @@ void GameSettingsScreen::CallbackMemstickFolder(bool yes) {
 		if (!File::Exists(pendingMemstickFolder_)) {
 			File::CreateFullPath(pendingMemstickFolder_);
 		}
-		if (!writeDataToFile(true, "1", 1, testWriteFile.c_str())) {
+		if (!File::WriteDataToFile(true, "1", 1, testWriteFile.c_str())) {
 			settingInfo_->Show(sy->T("ChangingMemstickPathInvalid", "That path couldn't be used to save Memory Stick files."), nullptr);
 			return;
 		}
 		File::Delete(testWriteFile);
 
-		writeDataToFile(true, pendingMemstickFolder_.c_str(), pendingMemstickFolder_.size(), memstickDirFile.c_str());
+		File::WriteDataToFile(true, pendingMemstickFolder_.c_str(), pendingMemstickFolder_.size(), memstickDirFile.c_str());
 		// Save so the settings, at least, are transferred.
 		g_Config.memStickDirectory = pendingMemstickFolder_ + "/";
 		g_Config.Save("MemstickPathChanged");
 		screenManager()->RecreateAllViews();
 	}
 }
-#endif
 
 void GameSettingsScreen::TriggerRestart(const char *why) {
 	// Extra save here to make sure the choice really gets saved even if there are shutdown bugs in
@@ -1733,7 +1726,7 @@ UI::EventReturn DeveloperToolsScreen::OnOpenTexturesIniFile(UI::EventParams &e) 
 	std::string gameID = g_paramSFO.GetDiscID();
 	std::string generatedFilename;
 	if (TextureReplacer::GenerateIni(gameID, &generatedFilename)) {
-		File::openIniFile(generatedFilename);
+		File::OpenFileInEditor(generatedFilename);
 	}
 	return UI::EVENT_DONE;
 }
@@ -1772,10 +1765,10 @@ UI::EventReturn DeveloperToolsScreen::OnCopyStatesToRoot(UI::EventParams &e) {
 	std::string savestate_dir = GetSysDirectory(DIRECTORY_SAVESTATE);
 	std::string root_dir = GetSysDirectory(DIRECTORY_MEMSTICK_ROOT);
 
-	std::vector<FileInfo> files;
-	getFilesInDir(savestate_dir.c_str(), &files, nullptr, 0);
+	std::vector<File::FileInfo> files;
+	GetFilesInDir(savestate_dir.c_str(), &files, nullptr, 0);
 
-	for (const FileInfo &file : files) {
+	for (const File::FileInfo &file : files) {
 		std::string src = file.fullName;
 		std::string dst = root_dir + file.name;
 		INFO_LOG(SYSTEM, "Copying file '%s' to '%s'", src.c_str(), dst.c_str());
@@ -1784,7 +1777,6 @@ UI::EventReturn DeveloperToolsScreen::OnCopyStatesToRoot(UI::EventParams &e) {
 
 	return UI::EVENT_DONE;
 }
-
 
 UI::EventReturn DeveloperToolsScreen::OnRemoteDebugger(UI::EventParams &e) {
 	if (allowDebugger_) {
