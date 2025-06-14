@@ -413,7 +413,11 @@ bool System_GetPropertyBool(SystemProperty prop) {
 	case SYSPROP_CAN_READ_BATTERY_PERCENTAGE:
 		return true;
 	case SYSPROP_ENOUGH_RAM_FOR_FULL_ISO:
+#if PPSSPP_ARCH(64BIT)
 		return true;
+#else
+		return false;
+#endif
 	default:
 		return false;
 	}
@@ -619,7 +623,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	case SystemRequestType::ASK_USERNAME_PASSWORD:
 		std::thread([=] {
-			std::string username;
+			std::string username = param2;
 			std::string password;
 			if (UserPasswordBox_GetStrings(MainWindow::GetHInstance(), MainWindow::GetHWND(), ConvertUTF8ToWString(param1).c_str(), &username, &password)) {
 				g_requestManager.PostSystemSuccess(requestId, (username + '\n' + password).c_str());
